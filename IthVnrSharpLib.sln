@@ -1,0 +1,60 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.2027
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vnrhook", "vnr\vnrhook\vnrhook.vcxproj", "{AB7E908D-1B4F-3805-A428-BCA9BE15B420}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1} = {D9BBDDBC-8D52-315F-9100-67227D979DB1}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IthVnrSharpLib", "IthVnrSharpLib\IthVnrSharpLib.csproj", "{46B6F714-D2A3-48AA-A89E-694BC18FC39E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4} = {1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}
+		{AB7E908D-1B4F-3805-A428-BCA9BE15B420} = {AB7E908D-1B4F-3805-A428-BCA9BE15B420}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vnrhost", "vnr\vnrhost\vnrhost.vcxproj", "{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E1BB3EAD-602D-360C-86A6-75425F77AC91} = {E1BB3EAD-602D-360C-86A6-75425F77AC91}
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1} = {D9BBDDBC-8D52-315F-9100-67227D979DB1}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "profile", "vnr\profile\profile.vcxproj", "{D9BBDDBC-8D52-315F-9100-67227D979DB1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ithsys", "vnr\ithsys\ithsys.vcxproj", "{E1BB3EAD-602D-360C-86A6-75425F77AC91}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AB7E908D-1B4F-3805-A428-BCA9BE15B420}.Debug|x86.ActiveCfg = Debug|Win32
+		{AB7E908D-1B4F-3805-A428-BCA9BE15B420}.Debug|x86.Build.0 = Debug|Win32
+		{AB7E908D-1B4F-3805-A428-BCA9BE15B420}.Release|x86.ActiveCfg = Release|Win32
+		{AB7E908D-1B4F-3805-A428-BCA9BE15B420}.Release|x86.Build.0 = Release|Win32
+		{46B6F714-D2A3-48AA-A89E-694BC18FC39E}.Debug|x86.ActiveCfg = Debug|x86
+		{46B6F714-D2A3-48AA-A89E-694BC18FC39E}.Debug|x86.Build.0 = Debug|x86
+		{46B6F714-D2A3-48AA-A89E-694BC18FC39E}.Release|x86.ActiveCfg = Release|x86
+		{46B6F714-D2A3-48AA-A89E-694BC18FC39E}.Release|x86.Build.0 = Release|x86
+		{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}.Debug|x86.ActiveCfg = Debug|Win32
+		{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}.Debug|x86.Build.0 = Debug|Win32
+		{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}.Release|x86.ActiveCfg = Release|Win32
+		{1A75AC49-036C-30FF-BDA5-6EB3CD9858B4}.Release|x86.Build.0 = Release|Win32
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1}.Debug|x86.ActiveCfg = Debug|Win32
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1}.Debug|x86.Build.0 = Debug|Win32
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1}.Release|x86.ActiveCfg = Release|Win32
+		{D9BBDDBC-8D52-315F-9100-67227D979DB1}.Release|x86.Build.0 = Release|Win32
+		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Debug|x86.ActiveCfg = Debug|Win32
+		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Debug|x86.Build.0 = Debug|Win32
+		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Release|x86.ActiveCfg = Release|Win32
+		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F60BEB92-0DFE-49C0-9FBA-A2FBAE0EA1AE}
+	EndGlobalSection
+EndGlobal

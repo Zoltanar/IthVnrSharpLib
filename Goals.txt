@@ -1,0 +1,3 @@
+Implement thread linking
+implement custom hook
+implement copy to clipboard
