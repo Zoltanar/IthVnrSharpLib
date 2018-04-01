@@ -33,6 +33,7 @@ namespace IthVnrSharpLib
 				if (!value.EncodingDefined) value.SetEncoding();
 				_selectedTextThread.CloseByteSection(this, null);
 				_selectedTextThread = value;
+				OnPropertyChanged();
 			}
 		}
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Process.Id).ToList();
@@ -61,7 +62,7 @@ namespace IthVnrSharpLib
 
 		protected bool Finalized;
 		private TextOutputEvent _updateDisplayText;
-		private GetPreferredHookCodeEvent _getPreferredHookCode;
+		private GetPreferredHookEvent _getPreferredHook;
 		private AppDomain _ithVnrAppDomain;
 		private TextThread _selectedTextThread;
 
@@ -74,16 +75,16 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, VNR vnrProxy, AppDomain ithVnrAppDomain, GetPreferredHookCodeEvent getPreferredHookCode)
+		public void Initialize(TextOutputEvent updateDisplayText, VNR vnrProxy, AppDomain ithVnrAppDomain, GetPreferredHookEvent getPreferredHook)
 		{
 			_ithVnrAppDomain = ithVnrAppDomain;
 			VnrProxy = vnrProxy;
 			_updateDisplayText = updateDisplayText;
-			_getPreferredHookCode = getPreferredHookCode;
+			_getPreferredHook = getPreferredHook;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			if (VnrProxy.Host_Open())
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, vnrProxy, getPreferredHookCode);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, vnrProxy, getPreferredHook);
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(HookManager, vnrProxy);
 			}
@@ -99,7 +100,7 @@ namespace IthVnrSharpLib
 
 		public void ReInitialize(VNR vnrProxy, AppDomain ithVnrAppDomain)
 		{
-			Initialize(_updateDisplayText, vnrProxy, ithVnrAppDomain, _getPreferredHookCode);
+			Initialize(_updateDisplayText, vnrProxy, ithVnrAppDomain, _getPreferredHook);
 			Finalized = false;
 		}
 
