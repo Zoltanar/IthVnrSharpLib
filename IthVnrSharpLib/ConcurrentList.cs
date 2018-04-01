@@ -37,6 +37,7 @@ namespace IthVnrSharpLib
 			}
 		}
 	}
+
 	public class ConcurrentList<T> : ConcurrentListBase<T>
 	{
 		public T[] ArrayCopy()
@@ -55,6 +56,7 @@ namespace IthVnrSharpLib
 			}
 		}
 	}
+
 	public class ConcurrentArrayList<T> : ConcurrentListBase<T[]>
 	{
 		public int TrimAt { get; set; }

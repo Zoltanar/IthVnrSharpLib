@@ -48,10 +48,10 @@ namespace IthVnrSharpLib
 			}
 		}
 
-		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, GetPreferredHookCodeEvent getPreferredHookCode)
+		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, GetPreferredHookEvent getPreferredHook)
 		{
 			_vnrProxy = vnrProxy;
-			TextThread.GetPreferredHookCode = getPreferredHookCode;
+			TextThread.GetPreferredHook = getPreferredHook;
 			TextThread.UpdateDisplay = updateDisplayText;
 			TextThread.VnrProxy = vnrProxy;
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
@@ -91,8 +91,12 @@ namespace IthVnrSharpLib
 			if (_consoleThread.IsDisplay) UpdateDisplayThread();
 		}
 
-		private void UpdateDisplayThread() => _viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
-		
+		private void UpdateDisplayThread()
+		{
+			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
+			_viewModel.OnPropertyChanged(nameof(_viewModel.PrefEncoding));
+		}
+
 		private IntPtr TextThread_GetThreadParameter(IntPtr thread) => _vnrProxy.TextThread_GetThreadParameter(thread);
 
 		private void HookManager_RegisterThreadCreateCallback(VNR.ThreadEventCallback threadCreate) => _vnrProxy.HookManager_RegisterThreadCreateCallback(HookManager, threadCreate);
@@ -157,8 +161,7 @@ namespace IthVnrSharpLib
 			{
 				if (b1)
 				{
-					thread.PrefEncoding = _viewModel.PrefEncoding;
-					thread.EncodingDefined = true;
+					thread.SetEncoding();
 				}
 				thread.IsPosting = true;
 				_viewModel.SelectedTextThread = thread;

@@ -13,9 +13,12 @@ using Timer = System.Timers.Timer;
 
 namespace IthVnrSharpLib
 {
+	public delegate (string HookCode, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
+	public delegate bool TextOutputEvent(object sender, TextOutputEventArgs e);
+
 	public class TextThread
 	{
-		public static GetPreferredHookCodeEvent GetPreferredHookCode;
+		public static GetPreferredHookEvent GetPreferredHook;
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		// ReSharper disable once NotAccessedField.Global
@@ -83,8 +86,8 @@ namespace IthVnrSharpLib
 				return result;
 			}
 		}
-		public bool HasPreferredHook => GetPreferredHookCode(Parameter.pid) != null;
-		public bool IsPreferredHookCode => HookCode != null && GetPreferredHookCode(Parameter.pid) == HookCode;
+		public bool HasPreferredHook => GetPreferredHook(Parameter.pid).HookCode != null;
+		public bool IsPreferredHookCode => HookCode != null && GetPreferredHook(Parameter.pid).HookCode == HookCode;
 		public TextThread LinkTo { get; set; }
 		public IntPtr ProcessRecordPtr { get; set; }
 
@@ -207,6 +210,12 @@ namespace IthVnrSharpLib
 
 		public void SetEncoding()
 		{
+			if (IsPreferredHookCode)
+			{
+				PrefEncoding = GetPreferredHook(ProcessId).PrefEncoding;
+				EncodingDefined = true;
+				return;
+			}
 			var bytes = Bytes.ToAggregateArray();
 			EncodingBools encoding = new EncodingBools();
 			try
@@ -224,7 +233,6 @@ namespace IthVnrSharpLib
 				{
 					PrefEncoding = Encoding.Unicode;
 				}
-
 				var stillNotFalse = encoding.Bools.Count(v => !v.HasValue);
 				if (stillNotFalse == 1)
 				{
@@ -238,11 +246,9 @@ namespace IthVnrSharpLib
 					foreach (var t in utf16)
 					{
 						var supportedFamilies = FontFamiliesSupportingChar(fontFamilies, t);
-						if (!supportedFamilies.Contains(msMincho))
-						{
-							encoding.IsUtf16 = false;
-							break;
-						}
+						if (supportedFamilies.Contains(msMincho)) continue;
+						encoding.IsUtf16 = false;
+						break;
 					}
 				}
 				if (encoding.IsUtf8 != false)
@@ -314,8 +320,13 @@ namespace IthVnrSharpLib
 			_monitorThread = null;
 		}
 
+		/// <summary>
+		/// true to break from loop
+		/// </summary>
+		/// <returns></returns>
 		private bool MonitorLoop()
 		{
+			if (IsPreferredHookCode) return true;
 			if(_monitorPairs.Count > 20) _monitorPairs.Clear();
 			_monitorPairs[DateTime.UtcNow] = Bytes.AggregateCount + CurrentBytes.Count;
 			if (_monitorPairs.Count < 5) return false;
@@ -593,8 +604,4 @@ namespace IthVnrSharpLib
 			else FromInternal = true;
 		}
 	}
-
-	public delegate string GetPreferredHookCodeEvent(uint processId);
-
-	public delegate bool TextOutputEvent(object sender, TextOutputEventArgs e);
 }
