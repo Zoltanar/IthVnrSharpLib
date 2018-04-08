@@ -75,6 +75,7 @@ namespace IthVnrSharpLib
 			if(trimCount > trimAt) throw new ArgumentException("trimCount must be lower than trimAt.");
 			TrimAt = trimAt;
 			TrimCount = trimCount;
+			Items.Capacity = trimAt;
 		}
 
 		/// <summary>
@@ -99,7 +100,7 @@ namespace IthVnrSharpLib
 			lock (SyncRoot)
 			{
 				Items.Add(item);
-				if (TrimAt > 0 && Items.Count > TrimAt) Items.RemoveRange(0, TrimCount);
+				if (TrimAt > 0 && Items.Count == TrimAt) Items.RemoveRange(0, TrimCount);
 			}
 		}
 

@@ -1,16 +1,19 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using IthVnrSharpLib.Properties;
 
 namespace IthVnrSharpLib
 {
-	public class HookManagerWrapper : MarshalByRefObject, IDisposable
+	public class HookManagerWrapper : MarshalByRefObject, IDisposable, INotifyPropertyChanged
 	{
 		public override object InitializeLifetimeService() => null;
-		
+
 		// ReSharper disable PrivateFieldCanBeConvertedToLocalVariable
 		private VNR.ThreadOutputFilterCallback _threadOutput;
 		private VNR.ThreadEventCallback _threadCreate;
@@ -30,12 +33,12 @@ namespace IthVnrSharpLib
 		public bool Paused { get; set; }
 		public bool ShowLatestThread { get; set; }
 		public bool IgnoreOtherThreads { get; set; }
-		public bool FollowPreferredHook { get; set; }
 		public bool MergeByHookCode
 		{
 			get => _mergeByHookCode;
 			set
 			{
+				//todo dont just clear threads, merge them properly
 				if (value == _mergeByHookCode) return;
 				_mergeByHookCode = value;
 				if (_consoleThread == null) return;
@@ -83,7 +86,7 @@ namespace IthVnrSharpLib
 		private void HookManager_RegisterProcessAttachCallback(VNR.ProcessEventCallback callback) => _vnrProxy.HookManager_RegisterProcessAttachCallback(HookManager, callback);
 
 		private void HookManager_RegisterProcessDetachCallback(VNR.ProcessEventCallback callback) => _vnrProxy.HookManager_RegisterProcessDetachCallback(HookManager, callback);
-		
+
 		public void ConsoleOutput(string text, bool show)
 		{
 			_consoleThread.AddText(text);
@@ -120,7 +123,7 @@ namespace IthVnrSharpLib
 		private int ThreadRemove(IntPtr thread)
 		{
 			Threads.TryRemove(thread, out var removedTextThread);
-			if(removedTextThread != null) removedTextThread.Removed = true;
+			if (removedTextThread != null) removedTextThread.Removed = true;
 			//set as removed instead of removing
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			if (_viewModel.SelectedTextThread != null) return 0;
@@ -128,7 +131,7 @@ namespace IthVnrSharpLib
 			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
 			return 0;
 		}
-		
+
 		private int RemoveProcessList(int pid)
 		{
 			Processes.TryRemove(pid, out _);
@@ -155,30 +158,28 @@ namespace IthVnrSharpLib
 			TextThread_RegisterOutputCallBack(threadPointer, _threadOutput, IntPtr.Zero);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			//select this thread if none/console selected, or if its preferred hook code or if its filepath hook and there exists no preferred hook
-			var b1 = thread.IsPreferredHookCode;
-			var b2 = ThreadIsFilePath(thread) && !thread.HasPreferredHook;
-			if (ConsoleOrNoThreadSelected && (b1 || b2) )
+			var selectedIsPreferred = _viewModel.SelectedTextThread != null && _viewModel.SelectedTextThread.IsPreferredHookCode;
+			var isPreferredHook = thread.IsPreferredHookCode;
+			var hasPreferredHook = thread.HasPreferredHook;
+			//if selected thread is already preferred, ignore
+			//if theres a preferred hook but this isn't it, ignore
+			//if there is something selected and this isn't preferred hook, ignore
+			if (selectedIsPreferred || hasPreferredHook && !isPreferredHook || !ConsoleOrNoThreadSelected && !isPreferredHook)
 			{
-				if (b1)
-				{
-					thread.SetEncoding();
-				}
-				thread.IsPosting = true;
-				_viewModel.SelectedTextThread = thread;
-				UpdateDisplayThread();
+				thread.IsPaused = true;
+				return 0;
 			}
+			if (isPreferredHook) thread.SetEncoding();
+			thread.IsPosting = true;
+			_viewModel.SelectedTextThread = thread;
+			UpdateDisplayThread();
 			return 0;
-		}
-
-		private bool ThreadIsFilePath(TextThread thread)
-		{
-			return Processes.Count == 1 && thread.HookCode.EndsWith(Processes.Values.First().MainFileName);
 		}
 
 		private void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
-			IntPtr pr = _vnrProxy.HookManager_GetProcessRecord(HookManager,thread.Parameter.pid);
+			IntPtr pr = _vnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
 			thread.ProcessRecordPtr = pr;
 			thread.SetUnicodeStatus(pr, thread.Parameter.hook);
 			thread.SetEntryString();
@@ -238,7 +239,7 @@ namespace IthVnrSharpLib
 				thread.StartTimer();
 			}
 			else thread.CurrentBytes.AddRange(value);
-			if (ShowLatestThread || (FollowPreferredHook && thread.IsPreferredHookCode))
+			if (ShowLatestThread)
 			{
 				_viewModel.SelectedTextThread = thread;
 				thread.IsPosting = true;
@@ -249,6 +250,12 @@ namespace IthVnrSharpLib
 
 		public void Dispose()
 		{
+			foreach (var textThread in Threads)
+			{
+				textThread.Value.CurrentBytes.Clear();
+				textThread.Value.Bytes.Clear();
+			}
+			Threads.Clear();
 			HookManager_RegisterThreadCreateCallback(null);
 			HookManager_RegisterThreadRemoveCallback(null);
 			HookManager_RegisterThreadResetCallback(null);
@@ -278,6 +285,14 @@ namespace IthVnrSharpLib
 			}
 			fromThread.LinkTo = fromThread;
 			ConsoleOutput($"Linked thread {fromThread} to {toThread}", true);
+		}
+
+		public event PropertyChangedEventHandler PropertyChanged;
+
+		[NotifyPropertyChangedInvocator]
+		public void OnPropertyChanged([CallerMemberName] string propertyName = null)
+		{
+			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}
 	}
 

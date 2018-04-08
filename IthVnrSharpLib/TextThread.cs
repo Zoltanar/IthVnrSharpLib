@@ -327,7 +327,8 @@ namespace IthVnrSharpLib
 		private bool MonitorLoop()
 		{
 			if (IsPreferredHookCode) return true;
-			if(_monitorPairs.Count > 20) _monitorPairs.Clear();
+			if (IsPaused) return true;
+			if (_monitorPairs.Count > 20) _monitorPairs.Clear();
 			_monitorPairs[DateTime.UtcNow] = Bytes.AggregateCount + CurrentBytes.Count;
 			if (_monitorPairs.Count < 5) return false;
 			var list = _monitorPairs as IEnumerable<KeyValuePair<DateTime, int>>;

@@ -47,8 +47,10 @@ namespace IthVnrSharpLib
 		// 7/20/2014: jichi additional parameters for PSP games
 		public uint user_flags, user_value;
 
-		public static bool Parse(string cmd, ref HookParam hp)
+		public static  bool Parse(string cmd, ref HookParam hp)
 		{
+			unchecked
+			{
 			// /H[X]{A|B|W|S|Q}[N][data_offset[*drdo]][:sub_offset[*drso]]@addr[:[module[:{name|#ordinal}]]]
 			var rx = new Regex("^X?([ABWSQ])(N)?", RegexOptions.IgnoreCase);
 			var m1 = rx.Matches(cmd);
@@ -101,7 +103,8 @@ namespace IthVnrSharpLib
 			{
 				m = m1[0].Groups;
 				start = start.Substring(m[0].Value.Length);
-				hp.offset = uint.Parse(m[1].Value, NumberStyles.HexNumber);
+				if (m[1].Value.StartsWith("-")) hp.offset = (uint)-uint.Parse(m[1].Value.Substring(1), NumberStyles.HexNumber);
+				else hp.offset = uint.Parse(m[1].Value, NumberStyles.HexNumber);
 				if (m[2].Success)
 				{
 					hp.type |= (uint)HookParamType.DATA_INDIRECT;
@@ -193,6 +196,7 @@ namespace IthVnrSharpLib
 				}
 			}
 			return true;
+			}
 		}
 
 		private static uint Hash(string module)

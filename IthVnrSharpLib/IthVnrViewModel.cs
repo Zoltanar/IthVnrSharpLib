@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using IthVnrSharpLib.Properties;
 using System.Windows;
+using System.Windows.Input;
 
 namespace IthVnrSharpLib
 {
@@ -59,12 +60,24 @@ namespace IthVnrSharpLib
 			}
 		}
 		public IthVnrSettings Settings => StaticHelpers.CSettings;
+		public ICommand PauseOtherThreadsCommand { get; }
+		public ICommand ClearThreadCommand { get; }
+		public ICommand ClearOtherThreadsCommand { get; }
+		public ICommand DontPostOthersCommand { get; }
 
 		protected bool Finalized;
 		private TextOutputEvent _updateDisplayText;
 		private GetPreferredHookEvent _getPreferredHook;
 		private AppDomain _ithVnrAppDomain;
 		private TextThread _selectedTextThread;
+
+		public IthVnrViewModel()
+		{
+			PauseOtherThreadsCommand = new IthCommandHandler(PauseOtherThreads);
+			ClearThreadCommand = new IthCommandHandler(ClearThread);
+			ClearOtherThreadsCommand = new IthCommandHandler(ClearOtherThreads);
+			DontPostOthersCommand = new IthCommandHandler(DontPostOthers);
+		}
 
 		[NotifyPropertyChangedInvocator]
 		public void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -139,18 +152,34 @@ namespace IthVnrSharpLib
 			_updateDisplayText(this, new TextOutputEventArgs(SelectedTextThread, text, "Selected Text", false));
 		}
 
-		public void PostDisplayedOnly()
+		public void DontPostOthers()
 		{
 			foreach (var textThread in DisplayThreads)
 			{
-				textThread.IsPosting = textThread == SelectedTextThread;
+				if(textThread.IsDisplay) continue;
+				textThread.IsPosting = false;
 			}
 			OnPropertyChanged(nameof(SelectedTextThread));
 		}
-
+		
 		public void PauseOtherThreads()
 		{
 			foreach (var thread in HookManager.Threads.Values) thread.IsPaused = !thread.IsDisplay;
+		}
+
+		public void ClearThread()
+		{
+			SelectedTextThread.Bytes.Clear();
+			OnPropertyChanged(nameof(SelectedTextThread));
+		}
+
+		public void ClearOtherThreads()
+		{
+			foreach (var thread in HookManager.Threads.Values)
+			{
+				if(thread.IsDisplay) continue;
+				thread.Bytes.Clear();
+			}
 		}
 
 	}

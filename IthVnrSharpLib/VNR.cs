@@ -28,7 +28,7 @@ namespace IthVnrSharpLib
 		private const string VnrDll = "vnrhost.dll";
 
 		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly List<object> _antiGcList = new List<object>();
+		private readonly HashSet<object> _antiGcList = new HashSet<object>();
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
