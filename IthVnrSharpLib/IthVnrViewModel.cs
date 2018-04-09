@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using IthVnrSharpLib.Properties;
@@ -41,6 +43,7 @@ namespace IthVnrSharpLib
 		public ProcessInfo SelectedProcess { get; set; }
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
 		public VNR VnrProxy { get; private set; }
+		public static AppDomain IthVnrDomain { get; private set; }
 		public virtual bool MergeByHookCode
 		{
 			get => HookManager?.MergeByHookCode ?? false;
@@ -68,7 +71,6 @@ namespace IthVnrSharpLib
 		protected bool Finalized;
 		private TextOutputEvent _updateDisplayText;
 		private GetPreferredHookEvent _getPreferredHook;
-		private AppDomain _ithVnrAppDomain;
 		private TextThread _selectedTextThread;
 
 		public IthVnrViewModel()
@@ -88,18 +90,17 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, VNR vnrProxy, AppDomain ithVnrAppDomain, GetPreferredHookEvent getPreferredHook)
+		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook)
 		{
-			_ithVnrAppDomain = ithVnrAppDomain;
-			VnrProxy = vnrProxy;
+			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			_getPreferredHook = getPreferredHook;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			if (VnrProxy.Host_Open())
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, vnrProxy, getPreferredHook);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, getPreferredHook);
 				Application.Current.Exit += Finalize;
-				Commands = new Commands(HookManager, vnrProxy);
+				Commands = new Commands(HookManager, VnrProxy);
 			}
 			else
 			{
@@ -111,9 +112,9 @@ namespace IthVnrSharpLib
 			OnPropertyChanged(nameof(DisplayProcesses));
 		}
 
-		public void ReInitialize(VNR vnrProxy, AppDomain ithVnrAppDomain)
+		public void ReInitialize()
 		{
-			Initialize(_updateDisplayText, vnrProxy, ithVnrAppDomain, _getPreferredHook);
+			Initialize(_updateDisplayText, _getPreferredHook);
 			Finalized = false;
 		}
 
@@ -126,9 +127,8 @@ namespace IthVnrSharpLib
 			{
 				Settings.Save();
 				HookManager?.Dispose();
-				VnrProxy?.Host_Close();
-				VnrProxy?.Host_IthCloseSystemService();
-				if (_ithVnrAppDomain != null) AppDomain.Unload(_ithVnrAppDomain);
+				VnrProxy?.Exit();
+				if (IthVnrDomain != null) AppDomain.Unload(IthVnrDomain);
 			}
 			catch (Exception ex)
 			{
@@ -140,6 +140,7 @@ namespace IthVnrSharpLib
 				Commands = null;
 				SelectedTextThread = null;
 				SelectedProcess = null;
+				VnrProxy = null;
 				OnPropertyChanged(nameof(SelectedTextThread));
 				OnPropertyChanged(nameof(SelectedProcess));
 				Finalized = true;
@@ -180,6 +181,14 @@ namespace IthVnrSharpLib
 				if(thread.IsDisplay) continue;
 				thread.Bytes.Clear();
 			}
+		}
+
+		public void InitVnrProxy()
+		{
+			var path = Path.GetFullPath(@"IthVnrSharpLib.dll");
+			var assembly = Assembly.LoadFile(path);
+			IthVnrDomain = AppDomain.CreateDomain(@"StaticMethodsIthVnrAppDomain");
+			VnrProxy = (VNR)IthVnrDomain.CreateInstanceAndUnwrap(assembly.FullName, @"IthVnrSharpLib.VNR");
 		}
 
 	}

@@ -283,7 +283,7 @@ namespace IthVnrSharpLib
 				ConsoleOutput($"Thread with number {fromThreadNumber:X} not found.", true);
 				return;
 			}
-			fromThread.LinkTo = fromThread;
+			fromThread.LinkTo = toThread;
 			ConsoleOutput($"Linked thread {fromThread} to {toThread}", true);
 		}
 

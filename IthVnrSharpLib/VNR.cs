@@ -28,7 +28,7 @@ namespace IthVnrSharpLib
 		private const string VnrDll = "vnrhost.dll";
 
 		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly HashSet<object> _antiGcList = new HashSet<object>();
+		private readonly List<object> _antiGcList = new List<object>();
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
@@ -285,5 +285,11 @@ namespace IthVnrSharpLib
 		// ReSharper restore UnusedMember.Global
 		#endregion
 
+		public void Exit()
+		{
+			Host_Close();
+			Host_IthCloseSystemService();
+			_antiGcList.Clear();
+		}
 	}
 }
