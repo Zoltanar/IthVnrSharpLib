@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -38,17 +39,51 @@ namespace IthVnrSharpLib
 			get => _mergeByHookCode;
 			set
 			{
-				//todo dont just clear threads, merge them properly
 				if (value == _mergeByHookCode) return;
 				_mergeByHookCode = value;
 				if (_consoleThread == null) return;
-				Threads.Clear();
-				Threads[_consoleThread.Id] = _consoleThread;
-				_viewModel.SelectedTextThread = _consoleThread;
+				var selectedThreadPointer = _viewModel.SelectedTextThread.Id;
+				if (_mergeByHookCode) MergeThreads();
+				else UnmergeThreads();
+				GetOrCreateThread(selectedThreadPointer, out var selectedThread);
+				UpdateDisplayThread(selectedThread);
 				_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
-				_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
 				_viewModel.OnPropertyChanged(nameof(_viewModel.HookManager));
 			}
+		}
+
+		private void UnmergeThreads()
+		{
+			var unmergedThreads = new List<TextThread>();
+			foreach (var thread in Threads.Values)
+			{
+				unmergedThreads.Add(thread);
+				foreach (var mergedThread in thread.MergedThreads.Values) unmergedThreads.Add(mergedThread);
+				thread.MergedThreads.Clear();
+			}
+			Threads.Clear();
+			Threads[_consoleThread.Id] = _consoleThread;
+			foreach (var thread in unmergedThreads) Threads[thread.Id] = thread;
+		}
+
+		private void MergeThreads()
+		{
+			var mergedGroups = Threads.Values.OrderBy(x => x.Number).GroupBy(x => x.HookCode);
+			var mergedThreads = new List<TextThread>();
+			foreach (var mergedGroup in mergedGroups)
+			{
+				var enumerator = mergedGroup.GetEnumerator();
+				enumerator.MoveNext();
+				var masterThread = enumerator.Current;
+				mergedThreads.Add(masterThread);
+				// ReSharper disable PossibleNullReferenceException
+				while (enumerator.MoveNext()) masterThread.MergedThreads[enumerator.Current.Id] = enumerator.Current;
+				// ReSharper restore PossibleNullReferenceException
+				enumerator.Dispose();
+			}
+			Threads.Clear();
+			Threads[_consoleThread.Id] = _consoleThread;
+			foreach (var thread in mergedThreads) Threads[thread.Id] = thread;
 		}
 
 		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, GetPreferredHookEvent getPreferredHook)
@@ -90,12 +125,12 @@ namespace IthVnrSharpLib
 		public void ConsoleOutput(string text, bool show)
 		{
 			_consoleThread.AddText(text);
-			if (show) _viewModel.SelectedTextThread = _consoleThread;
-			if (_consoleThread.IsDisplay) UpdateDisplayThread();
+			if (show) UpdateDisplayThread(_consoleThread);
 		}
 
-		private void UpdateDisplayThread()
+		private void UpdateDisplayThread(TextThread newSelectedThread = null)
 		{
+			if (newSelectedThread != null) _viewModel.SelectedTextThread = newSelectedThread;
 			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
 			_viewModel.OnPropertyChanged(nameof(_viewModel.PrefEncoding));
 		}
@@ -123,12 +158,15 @@ namespace IthVnrSharpLib
 		private int ThreadRemove(IntPtr thread)
 		{
 			Threads.TryRemove(thread, out var removedTextThread);
-			if (removedTextThread != null) removedTextThread.Removed = true;
+			if (removedTextThread != null)
+			{
+				removedTextThread.Removed = true;
+				TextThread_RegisterOutputCallBack(thread, null, IntPtr.Zero);
+			}
 			//set as removed instead of removing
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			if (_viewModel.SelectedTextThread != null) return 0;
-			_viewModel.SelectedTextThread = _consoleThread;
-			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
+			UpdateDisplayThread(_consoleThread);
 			return 0;
 		}
 
@@ -136,14 +174,23 @@ namespace IthVnrSharpLib
 		{
 			Processes.TryRemove(pid, out _);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
-			//set as removed instead of removing
+			var associatedThreads = Threads.Values.Where(x => x.ProcessId == pid).ToList();
+			foreach (var associatedThread in associatedThreads)
+			{
+				Threads.TryRemove(associatedThread.Id, out _);
+			}
+			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
+			if (_viewModel.SelectedTextThread != null) return 0;
+			UpdateDisplayThread(_consoleThread);
 			return 0;
 		}
 
 		private int RegisterProcessList(int pid)
 		{
-			var process = Process.GetProcessById(pid);
-			Processes[pid] = new ProcessInfo(process, true);
+			using (var process = Process.GetProcessById(pid))
+			{
+				Processes[pid] = new ProcessInfo(process, true, false);
+			}
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
 			_viewModel.SelectedProcess = Processes[pid];
 			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedProcess));
@@ -171,8 +218,7 @@ namespace IthVnrSharpLib
 			}
 			if (isPreferredHook) thread.SetEncoding();
 			thread.IsPosting = true;
-			_viewModel.SelectedTextThread = thread;
-			UpdateDisplayThread();
+			UpdateDisplayThread(thread);
 			return 0;
 		}
 
@@ -195,7 +241,7 @@ namespace IthVnrSharpLib
 			if (MergeByHookCode)
 			{
 				//if this pointer is already in another thread's merged collection
-				var existingMerged = Threads.FirstOrDefault(x => x.Value.MergedThreads.Contains(threadPointer)).Value;
+				var existingMerged = Threads.FirstOrDefault(x => x.Value.MergedThreads.Keys.Contains(threadPointer)).Value;
 				if (existingMerged != null)
 				{
 					thread = existingMerged;
@@ -208,7 +254,7 @@ namespace IthVnrSharpLib
 				var existingMaster = Threads.FirstOrDefault(x => x.Value.HookCode == threadHook).Value;
 				if (existingMaster != null)
 				{
-					existingMaster.MergedThreads.Add(threadPointer);
+					existingMaster.MergedThreads[threadPointer] = thread;
 					thread = existingMaster;
 					return;
 				}
@@ -298,7 +344,8 @@ namespace IthVnrSharpLib
 
 	public class ProcessInfo
 	{
-		public Process Process { get; set; }
+		public int Id { get; set; }
+		public string Name { get; set; }
 		public string DisplayString { get; set; }
 		public string MainFileName { get; set; }
 		public string FullMainFilePath { get; set; }
@@ -307,13 +354,15 @@ namespace IthVnrSharpLib
 
 		public override string ToString() => DisplayString;
 
-		public ProcessInfo(Process process, bool attached)
+		public ProcessInfo(Process process, bool attached, bool dispose)
 		{
-			Process = process;
-			DisplayString = $"[{process.Id}] {process.ProcessName}";
+			Id = process.Id;
+			Name = process.ProcessName;
+			DisplayString = $"[{Id}] {Name}";
 			Attached = attached;
 			FullMainFilePath = process.MainModule.FileName;
-			MainFileName = Path.GetFileName(process.MainModule.FileName);
+			MainFileName = Path.GetFileName(FullMainFilePath);
+			if (dispose) process.Dispose();
 		}
 
 		public ProcessInfo() { }

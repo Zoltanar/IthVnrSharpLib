@@ -39,7 +39,7 @@ namespace IthVnrSharpLib
 				OnPropertyChanged();
 			}
 		}
-		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Process.Id).ToList();
+		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
 		public ProcessInfo SelectedProcess { get; set; }
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
 		public VNR VnrProxy { get; private set; }
@@ -64,6 +64,7 @@ namespace IthVnrSharpLib
 		}
 		public IthVnrSettings Settings => StaticHelpers.CSettings;
 		public ICommand PauseOtherThreadsCommand { get; }
+		public ICommand UnpauseOtherThreadsCommand { get; }
 		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand DontPostOthersCommand { get; }
@@ -76,6 +77,7 @@ namespace IthVnrSharpLib
 		public IthVnrViewModel()
 		{
 			PauseOtherThreadsCommand = new IthCommandHandler(PauseOtherThreads);
+			UnpauseOtherThreadsCommand = new IthCommandHandler(UnpauseOtherThreads);
 			ClearThreadCommand = new IthCommandHandler(ClearThread);
 			ClearOtherThreadsCommand = new IthCommandHandler(ClearOtherThreads);
 			DontPostOthersCommand = new IthCommandHandler(DontPostOthers);
@@ -146,6 +148,7 @@ namespace IthVnrSharpLib
 				Finalized = true;
 				Debug.WriteLine($"(IthVnrViewModel) Completed exit procedures, took {exitWatch.Elapsed}");
 			}
+			GC.Collect();
 		}
 
 		public void OutputSelectedText(string text)
@@ -157,15 +160,28 @@ namespace IthVnrSharpLib
 		{
 			foreach (var textThread in DisplayThreads)
 			{
-				if(textThread.IsDisplay) continue;
+				if (textThread.IsDisplay) continue;
 				textThread.IsPosting = false;
 			}
 			OnPropertyChanged(nameof(SelectedTextThread));
 		}
-		
+
 		public void PauseOtherThreads()
 		{
-			foreach (var thread in HookManager.Threads.Values) thread.IsPaused = !thread.IsDisplay;
+			foreach (var thread in HookManager.Threads.Values)
+			{
+				if (thread.IsDisplay) continue;
+				thread.IsPaused = true;
+			}
+		}
+
+		public void UnpauseOtherThreads()
+		{
+			foreach (var thread in HookManager.Threads.Values)
+			{
+				if (thread.IsDisplay) continue;
+				thread.IsPaused = false;
+			}
 		}
 
 		public void ClearThread()
@@ -178,7 +194,7 @@ namespace IthVnrSharpLib
 		{
 			foreach (var thread in HookManager.Threads.Values)
 			{
-				if(thread.IsDisplay) continue;
+				if (thread.IsDisplay) continue;
 				thread.Bytes.Clear();
 			}
 		}

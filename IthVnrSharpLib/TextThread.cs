@@ -54,11 +54,11 @@ namespace IthVnrSharpLib
 				if (_isPosting) CloseByteSection(this, null);
 			}
 		}
-		public ConcurrentArrayList<byte> Bytes { get; } = new ConcurrentArrayList<byte>(300,200);
+		public ConcurrentArrayList<byte> Bytes { get; } = new ConcurrentArrayList<byte>(300, 200);
 		public virtual Encoding PrefEncoding { get; set; } = Encoding.Unicode;
 		public string HookCode { get; private set; }
 		public string HookName { get; private set; }
-		public HashSet<IntPtr> MergedThreads { get; } = new HashSet<IntPtr>();
+		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new Dictionary<IntPtr, TextThread>();
 		public ConcurrentList<byte> CurrentBytes { get; } = new ConcurrentList<byte>();
 		public ThreadParameter Parameter { get; set; }
 		public string EntryString => ThreadString == null ? null : $"{ThreadString}({HookCode})";
@@ -70,7 +70,7 @@ namespace IthVnrSharpLib
 			get => VnrProxy.TextThread_GetStatus(Id);
 			set => VnrProxy.TextThread_SetStatus(Id, value);
 		}
-		public ushort Number { get; private set;  }
+		public ushort Number { get; private set; }
 		public string ThreadString { get; private set; }
 		public virtual string Text
 		{
@@ -81,7 +81,7 @@ namespace IthVnrSharpLib
 				lock (Bytes.SyncRoot)
 				{
 					result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(x => PrefEncoding.GetString(x)))
-					         + Environment.NewLine + curString;
+							 + Environment.NewLine + curString;
 				}
 				return result;
 			}
@@ -98,7 +98,7 @@ namespace IthVnrSharpLib
 		private Thread _monitorThread;
 		private bool _isPosting;
 		private bool _isPaused;
-		private readonly Dictionary<DateTime,int> _monitorPairs = new Dictionary<DateTime, int>();
+		private readonly Dictionary<DateTime, int> _monitorPairs = new Dictionary<DateTime, int>();
 
 		public TextThread()
 		{
@@ -141,7 +141,7 @@ namespace IthVnrSharpLib
 			HookCode = GetLink();
 			//if( hookCode2 != HookCode) { }
 		}
-		
+
 		private void OnTickCopy(byte[] bytes)
 		{
 			var currentText = PrefEncoding.GetString(bytes);
@@ -323,7 +323,6 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// true to break from loop
 		/// </summary>
-		/// <returns></returns>
 		private bool MonitorLoop()
 		{
 			if (IsPreferredHookCode) return true;
@@ -344,7 +343,7 @@ namespace IthVnrSharpLib
 					continue;
 				}
 				var timePassed = pair.Key - startTime;
-				lpsList.Add((pair.Value-startLength) / timePassed.TotalSeconds);
+				lpsList.Add((pair.Value - startLength) / timePassed.TotalSeconds);
 				startTime = pair.Key;
 				startLength = pair.Value;
 			}
@@ -363,7 +362,7 @@ namespace IthVnrSharpLib
 			IsPaused = true;
 			return true;
 		}
-		
+
 		private unsafe string GetHookName(uint pid, uint hookAddr)
 		{
 			IntPtr handle = IntPtr.Zero;
@@ -489,7 +488,7 @@ namespace IthVnrSharpLib
 			}
 			if (pid != 0)
 			{
-				IntPtr allocationBase = GetAllocationBase( new IntPtr(hp.address));
+				IntPtr allocationBase = GetAllocationBase(new IntPtr(hp.address));
 				if (allocationBase != IntPtr.Zero)
 				{
 					string path = GetModuleFileNameAsString(allocationBase);
@@ -523,7 +522,7 @@ namespace IthVnrSharpLib
 		{
 			if (ProcessRecordPtr == IntPtr.Zero) return IntPtr.Zero;
 			var pr = Marshal.PtrToStructure<ProcessRecord>(ProcessRecordPtr);
-			if (WinAPI.VirtualQueryEx(pr.process_handle, addr, out var info, (uint) sizeof(WinAPI.MEMORY_BASIC_INFORMATION)) == 0) return IntPtr.Zero;
+			if (WinAPI.VirtualQueryEx(pr.process_handle, addr, out var info, (uint)sizeof(WinAPI.MEMORY_BASIC_INFORMATION)) == 0) return IntPtr.Zero;
 			return (info.Type & 0x1000000) != 0 ? info.AllocationBase : IntPtr.Zero;
 		}
 

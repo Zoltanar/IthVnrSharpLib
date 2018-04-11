@@ -28,7 +28,10 @@ namespace IthVnrSharpLib
 		private const string VnrDll = "vnrhost.dll";
 
 		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly List<object> _antiGcList = new List<object>();
+		private readonly List<Delegate> _antiGcList = new List<Delegate>();
+
+		// ReSharper disable once CollectionNeverQueried.Local
+		private readonly Dictionary<IntPtr, Delegate> _antiGcDict = new Dictionary<IntPtr, Delegate>();
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
@@ -76,19 +79,20 @@ namespace IthVnrSharpLib
 			return Inner.HookManager_RegisterThreadResetCallback(hookManager, callback);
 		}
 
-		public void TextThread_RegisterOutputCallBack(IntPtr hookManager, ThreadOutputFilterCallback callback, IntPtr data)
+		public void TextThread_RegisterOutputCallBack(IntPtr textThread, ThreadOutputFilterCallback callback, IntPtr data)
 		{
-			_antiGcList.Add(callback);
-			Inner.TextThread_RegisterOutputCallBack(hookManager, callback, data);
+			if (callback == null) _antiGcDict.Remove(textThread);
+			else _antiGcDict[textThread] = callback;
+			Inner.TextThread_RegisterOutputCallBack(textThread, callback, data);
 		}
-		
+
 
 		private static class Inner
 		{
 			[DllImport(VnrDll)]
 			[return: MarshalAs(UnmanagedType.Bool)]
 			public static extern bool Host_HijackProcess(uint pid);
-			
+
 			[DllImport(VnrDll)]
 			[return: MarshalAs(UnmanagedType.Bool)]
 			public static extern bool Host_Open();
@@ -199,7 +203,7 @@ namespace IthVnrSharpLib
 			public static extern string TextThread_GetThreadString(IntPtr textThread);
 
 			[DllImport(VnrDll)]
-			public static extern void Host_GetHookName([MarshalAs(UnmanagedType.LPStr)]StringBuilder str, uint parameterPid, uint parameterHook,uint length);
+			public static extern void Host_GetHookName([MarshalAs(UnmanagedType.LPStr)]StringBuilder str, uint parameterPid, uint parameterHook, uint length);
 		}
 
 		public static class InnerP
@@ -243,7 +247,7 @@ namespace IthVnrSharpLib
 
 		[Obsolete("Use C# Console Thread")]
 		public void HookManager_AddConsoleOutput(IntPtr hookManager, string text) => Inner.HookManager_AddConsoleOutput(hookManager, text);
-		
+
 		[Obsolete("Unused")]
 		public void HookManager_RegisterProcessNewHookCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
@@ -257,7 +261,7 @@ namespace IthVnrSharpLib
 			_antiGcList.Add(callback);
 			Inner.HookManager_RegisterConsoleCallback(hookManager, callback);
 		}
-		
+
 		[Obsolete("Use TextThread.SetEntryString")]
 		public bool TextThread_GetEntryString(IntPtr textThread, ref StringBuilder str, int len) => Inner.TextThread_GetEntryString(textThread, str, len);
 
@@ -271,7 +275,7 @@ namespace IthVnrSharpLib
 			Inner.Host_GetHookName(str, parameterPid, parameterHook, 512);
 			return str.ToString();
 		}
-		
+
 		[Obsolete("Use TextThread.SetUnicodeStatus")]
 		public bool SetTextThreadUnicodeStatus(IntPtr textThread, IntPtr processRecord, uint hook) => Inner.SetTextThreadUnicodeStatus(textThread, processRecord, hook);
 
@@ -290,6 +294,7 @@ namespace IthVnrSharpLib
 			Host_Close();
 			Host_IthCloseSystemService();
 			_antiGcList.Clear();
+			_antiGcDict.Clear();
 		}
 	}
 }
