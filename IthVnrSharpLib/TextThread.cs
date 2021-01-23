@@ -13,7 +13,7 @@ using Timer = System.Timers.Timer;
 
 namespace IthVnrSharpLib
 {
-	public delegate (string HookCode, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
+	public delegate (string HookCode, string HookFull, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
 	public delegate bool TextOutputEvent(object sender, TextOutputEventArgs e);
 
 	public class TextThread
@@ -72,6 +72,7 @@ namespace IthVnrSharpLib
 		}
 		public ushort Number { get; private set; }
 		public string ThreadString { get; private set; }
+		public string HookFull { get; private set; }
 		public virtual string Text
 		{
 			get
@@ -86,8 +87,25 @@ namespace IthVnrSharpLib
 				return result;
 			}
 		}
-		public bool HasPreferredHook => GetPreferredHook(Parameter.pid).HookCode != null;
-		public bool IsPreferredHookCode => HookCode != null && GetPreferredHook(Parameter.pid).HookCode == HookCode;
+		public (string HookCode, string HookFull, Encoding PrefEncoding) GetDefaults() => GetPreferredHook(Parameter.pid);
+
+		public bool IsPreferred
+		{
+			get
+			{
+				var defaults = GetDefaults();
+				return defaults.HookCode != null && defaults.HookCode == HookCode ||
+				       defaults.HookFull != null && defaults.HookFull == HookFull;
+			}
+		}
+		public bool IsPreferredFull
+		{
+			get
+			{
+				var defaults = GetDefaults();
+				return defaults.HookFull != null && defaults.HookFull == HookFull;
+			}
+		}
 		public TextThread LinkTo { get; set; }
 		public IntPtr ProcessRecordPtr { get; set; }
 
@@ -137,9 +155,9 @@ namespace IthVnrSharpLib
 		{
 			Number = VnrProxy.TextThread_GetNumber(Id);
 			HookName = GetHookName(Parameter.pid, Parameter.hook);
-			ThreadString = $"{Number:X4}:{Parameter.pid}:0x{Parameter.hook:X}:0x{Parameter.retn:X}:0x{Parameter.spl:X}:{HookName}";
+			HookFull = $"0x{Parameter.hook:X}:0x{Parameter.retn:X}:0x{Parameter.spl:X}:{HookName}";
+			ThreadString = $"{Number:X4}:{Parameter.pid}:{HookFull}";
 			HookCode = GetLink();
-			//if( hookCode2 != HookCode) { }
 		}
 
 		private void OnTickCopy(byte[] bytes)
@@ -188,8 +206,7 @@ namespace IthVnrSharpLib
 					if (currentBytes.Length > 2000) return; //todo report error, make 2000 a setting
 					Bytes.Add(currentBytes);
 					if (!IsPosting) return;
-					if (!EncodingDefined) SetEncoding();
-
+					if (!EncodingDefined) SetEncoding(null);
 					if (CopyToClipboard) OnTickCopy(currentBytes);
 					else OnTick(currentBytes);
 				}
@@ -208,11 +225,11 @@ namespace IthVnrSharpLib
 			sjis = ShiftJis.GetString(currentBytes);
 		}
 
-		public void SetEncoding()
+		public void SetEncoding(Encoding prefEncoding)
 		{
-			if (IsPreferredHookCode)
+			if (prefEncoding != null)
 			{
-				PrefEncoding = GetPreferredHook(ProcessId).PrefEncoding;
+				PrefEncoding = prefEncoding;
 				EncodingDefined = true;
 				return;
 			}
@@ -325,18 +342,18 @@ namespace IthVnrSharpLib
 		/// </summary>
 		private bool MonitorLoop()
 		{
-			if (IsPreferredHookCode) return true;
+			if (IsPreferred) return true;
 			if (IsPaused) return true;
 			if (_monitorPairs.Count > 20) _monitorPairs.Clear();
 			_monitorPairs[DateTime.UtcNow] = Bytes.AggregateCount + CurrentBytes.Count;
 			if (_monitorPairs.Count < 5) return false;
 			var list = _monitorPairs as IEnumerable<KeyValuePair<DateTime, int>>;
-			DateTime startTime = default(DateTime);
+			DateTime startTime = default;
 			int startLength = 0;
 			var lpsList = new List<double>();
 			foreach (var pair in list)
 			{
-				if (startTime == default(DateTime))
+				if (startTime == default)
 				{
 					startTime = pair.Key;
 					startLength = pair.Value;
@@ -508,7 +525,7 @@ namespace IthVnrSharpLib
 			}
 			else
 			{
-				// Hack. The original address is stored in the function field
+				// The original address is stored in the function field
 				// if (module == NULL && function != NULL).
 				// MODULE_OFFSET and FUNCTION_OFFSET are removed from HookParam.type in
 				// TextHook::UnsafeInsertHookCode() and can not be used here.
@@ -589,7 +606,7 @@ namespace IthVnrSharpLib
 				if (TextThread.IsConsole) source += "/Console";
 				else source += "/" + TextThread.EntryString.Substring(0, 4);
 			}
-			return $"{Time:HH:mm:ss:fff}\t{source}\t{Text.Substring(0, Math.Min(50, Text.Length))}";
+			return $"{Time:HH:mm:ss:fff} {source} {Text.Substring(0, Math.Min(50, Text.Length))}";
 		}
 
 		public TextOutputEventArgs(TextThread thread, string text, string source, bool clipboard)

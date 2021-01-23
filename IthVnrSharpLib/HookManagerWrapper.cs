@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using IthVnrSharpLib.Properties;
 
 namespace IthVnrSharpLib
@@ -28,7 +29,7 @@ namespace IthVnrSharpLib
 		private readonly VNR _vnrProxy;
 		public readonly IntPtr HookManager;
 		private bool _mergeByHookCode;
-		private readonly ConsoleThread _consoleThread;
+		public readonly ConsoleThread ConsoleThread;
 		public ConcurrentDictionary<IntPtr, TextThread> Threads { get; } = new ConcurrentDictionary<IntPtr, TextThread>();
 		public ConcurrentDictionary<int, ProcessInfo> Processes { get; } = new ConcurrentDictionary<int, ProcessInfo>();
 		public bool Paused { get; set; }
@@ -41,7 +42,7 @@ namespace IthVnrSharpLib
 			{
 				if (value == _mergeByHookCode) return;
 				_mergeByHookCode = value;
-				if (_consoleThread == null) return;
+				if (ConsoleThread == null) return;
 				var selectedThreadPointer = _viewModel.SelectedTextThread.Id;
 				if (_mergeByHookCode) MergeThreads();
 				else UnmergeThreads();
@@ -62,7 +63,7 @@ namespace IthVnrSharpLib
 				thread.MergedThreads.Clear();
 			}
 			Threads.Clear();
-			Threads[_consoleThread.Id] = _consoleThread;
+			Threads[ConsoleThread.Id] = ConsoleThread;
 			foreach (var thread in unmergedThreads) Threads[thread.Id] = thread;
 		}
 
@@ -82,7 +83,7 @@ namespace IthVnrSharpLib
 				enumerator.Dispose();
 			}
 			Threads.Clear();
-			Threads[_consoleThread.Id] = _consoleThread;
+			Threads[ConsoleThread.Id] = ConsoleThread;
 			foreach (var thread in mergedThreads) Threads[thread.Id] = thread;
 		}
 
@@ -109,8 +110,8 @@ namespace IthVnrSharpLib
 			HookManager_RegisterThreadRemoveCallback(_threadRemove);
 			HookManager_RegisterThreadResetCallback(_threadReset);
 			IntPtr console = HookManager_FindSingle(0);
-			_consoleThread = new ConsoleThread { Id = console };
-			Threads[console] = _consoleThread;
+			ConsoleThread = new ConsoleThread { Id = console };
+			Threads[console] = ConsoleThread;
 			TextThread_RegisterOutputCallBack(console, _threadOutput, IntPtr.Zero);
 			HookManager_RegisterProcessAttachCallback(_registerProcessList);
 			HookManager_RegisterProcessDetachCallback(_removeProcessList);
@@ -124,15 +125,14 @@ namespace IthVnrSharpLib
 
 		public void ConsoleOutput(string text, bool show)
 		{
-			_consoleThread.AddText(text);
-			if (show) UpdateDisplayThread(_consoleThread);
+			ConsoleThread.AddText(text);
+			if (show) UpdateDisplayThread(ConsoleThread);
 		}
 
 		private void UpdateDisplayThread(TextThread newSelectedThread = null)
 		{
 			if (newSelectedThread != null) _viewModel.SelectedTextThread = newSelectedThread;
 			_viewModel.OnPropertyChanged(nameof(_viewModel.SelectedTextThread));
-			_viewModel.OnPropertyChanged(nameof(_viewModel.PrefEncoding));
 		}
 
 		private IntPtr TextThread_GetThreadParameter(IntPtr thread) => _vnrProxy.TextThread_GetThreadParameter(thread);
@@ -144,7 +144,6 @@ namespace IthVnrSharpLib
 		private IntPtr HookManager_FindSingle(int number) => _vnrProxy.HookManager_FindSingle(HookManager, number);
 		private void TextThread_RegisterOutputCallBack(IntPtr textThread, VNR.ThreadOutputFilterCallback callback, IntPtr data) => _vnrProxy.TextThread_RegisterOutputCallBack(textThread, callback, data);
 		private void Host_GetHookManager(ref IntPtr hookManager) => _vnrProxy.Host_GetHookManager(ref hookManager);
-		private bool ConsoleOrNoThreadSelected => _viewModel.SelectedTextThread?.IsConsole ?? true;
 
 		private int ThreadReset(IntPtr threadPointer)
 		{
@@ -166,13 +165,13 @@ namespace IthVnrSharpLib
 			//set as removed instead of removing
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			if (_viewModel.SelectedTextThread != null) return 0;
-			UpdateDisplayThread(_consoleThread);
+			UpdateDisplayThread(ConsoleThread);
 			return 0;
 		}
 
 		private int RemoveProcessList(int pid)
 		{
-			Processes.TryRemove(pid, out _);
+			Processes.TryRemove(pid, out _); //todo check the selected thread throughout this method, ensure it ends in something
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
 			var associatedThreads = Threads.Values.Where(x => x.ProcessId == pid).ToList();
 			foreach (var associatedThread in associatedThreads)
@@ -180,8 +179,8 @@ namespace IthVnrSharpLib
 				Threads.TryRemove(associatedThread.Id, out _);
 			}
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
-			if (_viewModel.SelectedTextThread != null) return 0;
-			UpdateDisplayThread(_consoleThread);
+			if (Threads.Values.Contains(_viewModel.SelectedTextThread)) return 0;
+			UpdateDisplayThread(ConsoleThread);
 			return 0;
 		}
 
@@ -199,27 +198,41 @@ namespace IthVnrSharpLib
 
 		private int ThreadCreate(IntPtr threadPointer)
 		{
-			if (Paused) return 0;
 			if (threadPointer != _viewModel.SelectedTextThread?.Id && IgnoreOtherThreads) return 0;
 			GetOrCreateThread(threadPointer, out var thread);
 			TextThread_RegisterOutputCallBack(threadPointer, _threadOutput, IntPtr.Zero);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			//select this thread if none/console selected, or if its preferred hook code or if its filepath hook and there exists no preferred hook
-			var selectedIsPreferred = _viewModel.SelectedTextThread != null && _viewModel.SelectedTextThread.IsPreferredHookCode;
-			var isPreferredHook = thread.IsPreferredHookCode;
-			var hasPreferredHook = thread.HasPreferredHook;
-			//if selected thread is already preferred, ignore
-			//if theres a preferred hook but this isn't it, ignore
-			//if there is something selected and this isn't preferred hook, ignore
-			if (selectedIsPreferred || hasPreferredHook && !isPreferredHook || !ConsoleOrNoThreadSelected && !isPreferredHook)
+			var defaults = thread.GetDefaults();
+			if (!Paused && SelectNewThread(thread, defaults))
 			{
-				thread.IsPaused = true;
-				return 0;
+				if (defaults.PrefEncoding != null) thread.SetEncoding(defaults.PrefEncoding);
+				thread.IsPosting = true;
+				UpdateDisplayThread(thread);
 			}
-			if (isPreferredHook) thread.SetEncoding();
-			thread.IsPosting = true;
-			UpdateDisplayThread(thread);
+			else
+			{
+				if(defaults.HookCode != null || defaults.HookFull != null) thread.IsPaused = true;
+			}
 			return 0;
+		}
+
+		private bool SelectNewThread(TextThread thread, (string HookCode, string HookFull, Encoding PrefEncoding) defaults)
+		{
+			//if thread is the preferred full hook, select it
+			if (thread.IsPreferredFull) return true;
+			//if current thread is preferred full hook, ignore this one
+			if (_viewModel.SelectedTextThread.IsPreferredFull) return false;
+			//if there is a preferred full hook (and this isn't it, proved above), ignore this one
+			if (defaults.HookFull != null) return false;
+			//if current thread is preferred hook code, ignore this one
+			if (_viewModel.SelectedTextThread.IsPreferred) return false;
+			//if thread is preferred hook code, select it
+			if (thread.IsPreferred) return true;
+			//if there is a preferred hook code (and this isn't it, proved above), ignore this one
+			if (defaults.HookCode != null) return false;
+			//if none of those conditions match, select this thread
+			return true;
 		}
 
 		private void InitThread(TextThread thread)
@@ -267,13 +280,12 @@ namespace IthVnrSharpLib
 			}
 			Threads[threadPointer] = thread;
 		}
-
+		
 		private int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
 		{
-			if (Paused || len == 0) return len;
+			if (Paused || len == 0 || _viewModel.IsPausedFunction()) return len;
 			GetOrCreateThread(threadPointer, out var thread);
 			if (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay) return len;
-			if (thread.IsPaused) return len;
 			if (newLine)
 			{
 				//thread.CloseByteSection(this, null);
@@ -354,12 +366,13 @@ namespace IthVnrSharpLib
 
 		public override string ToString() => DisplayString;
 
-		public ProcessInfo(Process process, bool attached, bool dispose)
+		public ProcessInfo([NotNull]Process process, bool attached, bool dispose)
 		{
 			Id = process.Id;
 			Name = process.ProcessName;
 			DisplayString = $"[{Id}] {Name}";
 			Attached = attached;
+			if(process.MainModule == null) throw new InvalidOperationException($"Main Module of Process [{process.Id}:{process.MainWindowTitle}] was null.");
 			FullMainFilePath = process.MainModule.FileName;
 			MainFileName = Path.GetFileName(FullMainFilePath);
 			if (dispose) process.Dispose();

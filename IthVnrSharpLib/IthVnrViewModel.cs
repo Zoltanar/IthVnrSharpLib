@@ -10,6 +10,7 @@ using System.Text;
 using IthVnrSharpLib.Properties;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace IthVnrSharpLib
 {
@@ -31,12 +32,16 @@ namespace IthVnrSharpLib
 				if (_selectedTextThread == value) return;
 				if (_selectedTextThread != null) _selectedTextThread.IsDisplay = false; //set old thread as no longer displayed
 				_selectedTextThread = value;
-				if (value == null) return;
+				if (value == null)
+				{
+					if (HookManager?.ConsoleThread == null) return;
+					_selectedTextThread = HookManager.ConsoleThread;
+				}
 				_selectedTextThread.IsDisplay = true; //set new thread as displayed
-				if (!value.EncodingDefined) value.SetEncoding();
+				if (!_selectedTextThread.EncodingDefined) _selectedTextThread.SetEncoding(null);
 				_selectedTextThread.CloseByteSection(this, null);
-				_selectedTextThread = value;
 				OnPropertyChanged();
+				OnPropertyChanged(nameof(PrefEncoding));
 			}
 		}
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
@@ -44,6 +49,7 @@ namespace IthVnrSharpLib
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
 		public VNR VnrProxy { get; private set; }
 		public static AppDomain IthVnrDomain { get; private set; }
+		public Func<bool> IsPausedFunction = () => false;
 		public virtual bool MergeByHookCode
 		{
 			get => HookManager?.MergeByHookCode ?? false;
@@ -63,16 +69,30 @@ namespace IthVnrSharpLib
 			}
 		}
 		public IthVnrSettings Settings => StaticHelpers.CSettings;
+		public Brush MainTextBoxBackground => Finalized ? Brushes.DarkRed : Brushes.White;
 		public ICommand PauseOtherThreadsCommand { get; }
 		public ICommand UnpauseOtherThreadsCommand { get; }
 		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand DontPostOthersCommand { get; }
 
-		protected bool Finalized;
+
+		public bool Finalized
+		{
+			get => _finalized;
+			protected set
+			{
+				_finalized = value;
+				OnPropertyChanged();
+				OnPropertyChanged(nameof(MainTextBoxBackground));
+
+			}
+		}
+
 		private TextOutputEvent _updateDisplayText;
 		private GetPreferredHookEvent _getPreferredHook;
 		private TextThread _selectedTextThread;
+		private bool _finalized;
 
 		public IthVnrViewModel()
 		{
@@ -92,11 +112,12 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook)
+		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook, Func<bool> isPausedFunction)
 		{
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			_getPreferredHook = getPreferredHook;
+			IsPausedFunction = isPausedFunction;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			if (VnrProxy.Host_Open())
 			{
@@ -116,7 +137,7 @@ namespace IthVnrSharpLib
 
 		public void ReInitialize()
 		{
-			Initialize(_updateDisplayText, _getPreferredHook);
+			Initialize(_updateDisplayText, _getPreferredHook, IsPausedFunction);
 			Finalized = false;
 		}
 
@@ -124,7 +145,7 @@ namespace IthVnrSharpLib
 		{
 			if (Finalized) return;
 			var exitWatch = Stopwatch.StartNew();
-			Debug.WriteLine("(IthVnrViewModel) Starting exit procedures...");
+			Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Starting exit procedures...");
 			try
 			{
 				Settings.Save();
@@ -134,7 +155,7 @@ namespace IthVnrSharpLib
 			}
 			catch (Exception ex)
 			{
-				Debug.WriteLine($"IthVnrViewModel.Finalize {ex.Message}");
+				Debug.WriteLine($"{nameof(IthVnrViewModel)}.{nameof(Finalize)} {ex.Message}");
 			}
 			finally
 			{
@@ -146,7 +167,7 @@ namespace IthVnrSharpLib
 				OnPropertyChanged(nameof(SelectedTextThread));
 				OnPropertyChanged(nameof(SelectedProcess));
 				Finalized = true;
-				Debug.WriteLine($"(IthVnrViewModel) Completed exit procedures, took {exitWatch.Elapsed}");
+				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");
 			}
 			GC.Collect();
 		}

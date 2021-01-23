@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 // ReSharper disable UnusedMember.Global
 // ReSharper disable FieldCanBeMadeReadOnly.Global
 // ReSharper disable InconsistentNaming
+// ReSharper disable IdentifierTypo
 
 namespace IthVnrSharpLib
 {
@@ -38,7 +39,7 @@ namespace IthVnrSharpLib
         USING_SPLIT = 0x10,    // aware of split time?
         SPLIT_INDIRECT = 0x20,
         MODULE_OFFSET = 0x40,    // do hash module, and the address is relative to module
-        FUNCTION_OFFSET = 0x80,    // do hash function, and the address is relative to funccion
+        FUNCTION_OFFSET = 0x80,    // do hash function, and the address is relative to function
         PRINT_DWORD = 0x100, // jichi 12/7/2014: Removed
         NO_ASCII = 0x100,   // jichi 1l/22/2015: Skip ascii characters
         STRING_LAST_CHAR = 0x200,

@@ -2,7 +2,7 @@
 
 namespace IthVnrSharpLib
 {
-	class ConsoleThread : TextThread
+	public class ConsoleThread : TextThread
 	{
 		public override bool IsConsole => true;
 		public override bool IsPaused => false;
