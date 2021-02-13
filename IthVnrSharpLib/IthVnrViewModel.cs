@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -9,6 +10,8 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using IthVnrSharpLib.Properties;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -23,33 +26,14 @@ namespace IthVnrSharpLib
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
 		public Commands Commands { get; protected set; }
-		public List<TextThread> DisplayThreads => HookManager?.Threads.Values.OrderBy(x => x.EntryString).ToList();
-		public TextThread SelectedTextThread
-		{
-			get => _selectedTextThread;
-			set
-			{
-				if (_selectedTextThread == value) return;
-				if (_selectedTextThread != null) _selectedTextThread.IsDisplay = false; //set old thread as no longer displayed
-				_selectedTextThread = value;
-				if (value == null)
-				{
-					if (HookManager?.ConsoleThread == null) return;
-					_selectedTextThread = HookManager.ConsoleThread;
-				}
-				_selectedTextThread.IsDisplay = true; //set new thread as displayed
-				if (!_selectedTextThread.EncodingDefined) _selectedTextThread.SetEncoding(null);
-				_selectedTextThread.CloseByteSection(this, null);
-				OnPropertyChanged();
-				OnPropertyChanged(nameof(PrefEncoding));
-			}
-		}
+		public ObservableCollection<FrameworkElement> DisplayThreads { get; } = new();
+		public virtual TextThread SelectedTextThread { get; set; }
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
 		public ProcessInfo SelectedProcess { get; set; }
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
 		public VNR VnrProxy { get; private set; }
 		public static AppDomain IthVnrDomain { get; private set; }
-		public Func<bool> IsPausedFunction = () => false;
+		public virtual bool IsPaused => false;
 		public virtual bool MergeByHookCode
 		{
 			get => HookManager?.MergeByHookCode ?? false;
@@ -59,15 +43,7 @@ namespace IthVnrSharpLib
 				OnPropertyChanged();
 			}
 		}
-		public virtual Encoding PrefEncoding
-		{
-			get => SelectedTextThread?.PrefEncoding ?? Encoding.Unicode;
-			set
-			{
-				SelectedTextThread.PrefEncoding = value;
-				OnPropertyChanged();
-			}
-		}
+		public Encoding PrefEncoding { get; set; }
 		public IthVnrSettings Settings => StaticHelpers.CSettings;
 		public Brush MainTextBoxBackground => Finalized ? Brushes.DarkRed : Brushes.White;
 		public ICommand PauseOtherThreadsCommand { get; }
@@ -75,6 +51,7 @@ namespace IthVnrSharpLib
 		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand DontPostOthersCommand { get; }
+		public GameTextThread[] GameTextThreads { get; set; } = new GameTextThread[0];
 
 
 		public bool Finalized
@@ -91,7 +68,6 @@ namespace IthVnrSharpLib
 
 		private TextOutputEvent _updateDisplayText;
 		private GetPreferredHookEvent _getPreferredHook;
-		private TextThread _selectedTextThread;
 		private bool _finalized;
 
 		public IthVnrViewModel()
@@ -112,12 +88,11 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook, Func<bool> isPausedFunction)
+		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook)
 		{
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			_getPreferredHook = getPreferredHook;
-			IsPausedFunction = isPausedFunction;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			if (VnrProxy.Host_Open())
 			{
@@ -131,14 +106,43 @@ namespace IthVnrSharpLib
 				Finalized = true;
 			}
 			OnPropertyChanged(nameof(HookManager));
-			OnPropertyChanged(nameof(DisplayThreads));
 			OnPropertyChanged(nameof(DisplayProcesses));
 		}
 
+
 		public void ReInitialize()
 		{
-			Initialize(_updateDisplayText, _getPreferredHook, IsPausedFunction);
+			Initialize(_updateDisplayText, _getPreferredHook);
 			Finalized = false;
+		}
+
+		/// <summary>
+		/// Can be overridden for specific logic when clearing thread display collection.
+		/// </summary>
+		public virtual void ClearThreadDisplayCollection()
+		{
+			DisplayThreads.Clear();
+		}
+
+		/// <summary>
+		/// Can be overridden to convert thread to a display object and add it to a collection
+		/// </summary>
+		public virtual void AddNewThreadToDisplayCollection(TextThread textThread)
+		{
+			Application.Current.Dispatcher.Invoke(() =>
+			{
+				var displayThread = new TextBlock(new Run(textThread.EntryString)) { Tag = textThread };
+				DisplayThreads.Add(displayThread);
+			});
+		}
+
+		/// <summary>
+		/// Can be overridden to convert thread to a display object and add it to a collection
+		/// </summary>
+		/// <param name="textThread"></param>
+		public virtual void RemoveThreadFromDisplayCollection(TextThread textThread)
+		{
+			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.First(x => x.Tag == textThread)));
 		}
 
 		public void Finalize(object sender, ExitEventArgs e)
@@ -151,6 +155,7 @@ namespace IthVnrSharpLib
 				Settings.Save();
 				HookManager?.Dispose();
 				VnrProxy?.Exit();
+				SaveGameTextThreads();
 				if (IthVnrDomain != null) AppDomain.Unload(IthVnrDomain);
 			}
 			catch (Exception ex)
@@ -172,6 +177,11 @@ namespace IthVnrSharpLib
 			GC.Collect();
 		}
 
+		protected virtual void SaveGameTextThreads()
+		{
+			//can be overridden to save game text threads to persistant data storage
+		}
+
 		public void OutputSelectedText(string text)
 		{
 			_updateDisplayText(this, new TextOutputEventArgs(SelectedTextThread, text, "Selected Text", false));
@@ -179,7 +189,7 @@ namespace IthVnrSharpLib
 
 		public void DontPostOthers()
 		{
-			foreach (var textThread in DisplayThreads)
+			foreach (var textThread in HookManager.Threads.Values)
 			{
 				if (textThread.IsDisplay) continue;
 				textThread.IsPosting = false;
@@ -189,34 +199,40 @@ namespace IthVnrSharpLib
 
 		public void PauseOtherThreads()
 		{
+			var selected = SelectedTextThread;
 			foreach (var thread in HookManager.Threads.Values)
 			{
-				if (thread.IsDisplay) continue;
+				if (thread == selected) continue;
 				thread.IsPaused = true;
 			}
 		}
 
 		public void UnpauseOtherThreads()
 		{
+			var selected = SelectedTextThread;
 			foreach (var thread in HookManager.Threads.Values)
 			{
-				if (thread.IsDisplay) continue;
+				if (thread == selected) continue;
 				thread.IsPaused = false;
 			}
 		}
 
 		public void ClearThread()
 		{
-			SelectedTextThread.Bytes.Clear();
-			OnPropertyChanged(nameof(SelectedTextThread));
+			var thread = SelectedTextThread;
+			if (thread == null) return;
+			thread.Bytes.Clear();
+			thread.OnPropertyChanged(nameof(thread.Text));
 		}
 
 		public void ClearOtherThreads()
 		{
+			var selected = SelectedTextThread;
 			foreach (var thread in HookManager.Threads.Values)
 			{
-				if (thread.IsDisplay) continue;
+				if (thread == selected) continue;
 				thread.Bytes.Clear();
+				thread.OnPropertyChanged(nameof(thread.Text));
 			}
 		}
 
@@ -228,5 +244,9 @@ namespace IthVnrSharpLib
 			VnrProxy = (VNR)IthVnrDomain.CreateInstanceAndUnwrap(assembly.FullName, @"IthVnrSharpLib.VNR");
 		}
 
+		public virtual void AddGameThread(GameTextThread gameTextThread)
+		{
+			//can be overridden to save a new game text thread to persistent data storage
+		}
 	}
 }

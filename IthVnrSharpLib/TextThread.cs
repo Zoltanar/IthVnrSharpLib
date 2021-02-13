@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -9,14 +11,15 @@ using System.Timers;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
+using IthVnrSharpLib.Properties;
 using Timer = System.Timers.Timer;
 
 namespace IthVnrSharpLib
 {
-	public delegate (string HookCode, string HookFull, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
+	public delegate (string HookCode, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
 	public delegate bool TextOutputEvent(object sender, TextOutputEventArgs e);
 
-	public class TextThread
+	public class TextThread : INotifyPropertyChanged
 	{
 		public static GetPreferredHookEvent GetPreferredHook;
 		public static TextOutputEvent UpdateDisplay;
@@ -28,11 +31,23 @@ namespace IthVnrSharpLib
 		public static IthVnrViewModel ViewModel;
 		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
 		private const uint MaxHook = 64;
-
+		
 		public bool Removed { get; set; }
 		public IntPtr Id { get; set; }
 		public virtual bool IsConsole { get; set; }
-		public bool IsDisplay { get; set; }
+
+		public bool IsDisplay
+		{
+			get => _isDisplay;
+			set
+			{
+				if (_isDisplay == value) return;
+				_isDisplay = value;
+				OnPropertyChanged();
+				if (!IsConsole) GameThread.IsDisplay = _isDisplay;
+			} 
+		}
+
 		public virtual bool IsPaused
 		{
 			get => _isPaused;
@@ -40,26 +55,43 @@ namespace IthVnrSharpLib
 			{
 				if (_isPaused == value) return;
 				_isPaused = value;
+				if (!IsConsole) GameThread.IsPaused = _isPaused;
+				OnPropertyChanged();
 				if (_isPaused || _monitorThread != null) return;
 				_monitorThread = new Thread(StartMonitor) { IsBackground = true };
 				_monitorThread.Start();
 			}
 		}
+
 		public virtual bool IsPosting
 		{
 			get => _isPosting;
 			set
 			{
 				_isPosting = value;
+				if (!IsConsole) GameThread.IsPosting = _isPosting;
 				if (_isPosting) CloseByteSection(this, null);
+				OnPropertyChanged();
 			}
 		}
-		public ConcurrentArrayList<byte> Bytes { get; } = new ConcurrentArrayList<byte>(300, 200);
-		public virtual Encoding PrefEncoding { get; set; } = Encoding.Unicode;
+
+		public ConcurrentArrayList<byte> Bytes { get; } = new (300, 200);
+
+		public virtual Encoding PrefEncoding
+		{
+			get => _prefEncoding;
+			set
+			{
+				_prefEncoding = value;
+				if (!IsConsole) GameThread.Encoding = value.WebName;
+				OnPropertyChanged();
+			}
+		}
+
 		public string HookCode { get; private set; }
 		public string HookName { get; private set; }
-		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new Dictionary<IntPtr, TextThread>();
-		public ConcurrentList<byte> CurrentBytes { get; } = new ConcurrentList<byte>();
+		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new ();
+		public ConcurrentList<byte> CurrentBytes { get; } = new ();
 		public ThreadParameter Parameter { get; set; }
 		public string EntryString => ThreadString == null ? null : $"{ThreadString}({HookCode})";
 		public virtual bool EncodingDefined { get; set; }
@@ -71,7 +103,7 @@ namespace IthVnrSharpLib
 			set => VnrProxy.TextThread_SetStatus(Id, value);
 		}
 		public ushort Number { get; private set; }
-		public string ThreadString { get; private set; }
+		public string ThreadString { get; protected set; }
 		public string HookFull { get; private set; }
 		public virtual string Text
 		{
@@ -87,27 +119,22 @@ namespace IthVnrSharpLib
 				return result;
 			}
 		}
-		public (string HookCode, string HookFull, Encoding PrefEncoding) GetDefaults() => GetPreferredHook(Parameter.pid);
+		public (string HookCode, Encoding PrefEncoding) GetDefaults() => GetPreferredHook(Parameter.pid);
 
 		public bool IsPreferred
 		{
 			get
 			{
 				var defaults = GetDefaults();
-				return defaults.HookCode != null && defaults.HookCode == HookCode ||
-				       defaults.HookFull != null && defaults.HookFull == HookFull;
+				return defaults.HookCode != null && defaults.HookCode == HookCode;
 			}
 		}
-		public bool IsPreferredFull
-		{
-			get
-			{
-				var defaults = GetDefaults();
-				return defaults.HookFull != null && defaults.HookFull == HookFull;
-			}
-		}
+
 		public TextThread LinkTo { get; set; }
 		public IntPtr ProcessRecordPtr { get; set; }
+
+		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
+		public GameTextThread GameThread { get; set; }
 
 		private static readonly object TimerTickLock = new object();
 		private Timer _timer;
@@ -117,6 +144,8 @@ namespace IthVnrSharpLib
 		private bool _isPosting;
 		private bool _isPaused;
 		private readonly Dictionary<DateTime, int> _monitorPairs = new Dictionary<DateTime, int>();
+		private bool _isDisplay = true;
+		private Encoding _prefEncoding = Encoding.Unicode;
 
 		public TextThread()
 		{
@@ -130,7 +159,9 @@ namespace IthVnrSharpLib
 			SetTextThreadUnicodeStatus(Marshal.PtrToStructure<ProcessRecord>(processRecord), hook);
 		}
 
-		public override string ToString() => EntryString ?? $"[{Id}] EntryString hasn't been set";
+		public override string ToString() => EntryString != null ? 
+			$"{(IsPaused ? "[Paused]" : string.Empty)}{(IsPosting ? "[Posting]" : string.Empty)}{EntryString}" : 
+			$"[{Id}] EntryString hasn't been set";
 
 		public void StartTimer()
 		{
@@ -586,6 +617,14 @@ namespace IthVnrSharpLib
 					default: return Encoding.Unicode;
 				}
 			}
+		}
+
+		public event PropertyChangedEventHandler PropertyChanged;
+
+		[NotifyPropertyChangedInvocator]
+		public void OnPropertyChanged([CallerMemberName] string propertyName = null)
+		{
+			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}
 	}
 
