@@ -24,8 +24,6 @@ namespace IthVnrSharpLib
 		public static GetPreferredHookEvent GetPreferredHook;
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
-		// ReSharper disable once NotAccessedField.Global
-		public static IntPtr HookManager;
 		public static Func<bool> CopyToClipboardFunc;
 		private static bool CopyToClipboard => CopyToClipboardFunc();
 		public static IthVnrViewModel ViewModel;
@@ -90,6 +88,8 @@ namespace IthVnrSharpLib
 
 		public string HookCode { get; private set; }
 		public string HookName { get; private set; }
+		public string HookNameless { get; private set; }
+		public string HookFull { get; private set; }
 		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new ();
 		public ConcurrentList<byte> CurrentBytes { get; } = new ();
 		public ThreadParameter Parameter { get; set; }
@@ -104,7 +104,6 @@ namespace IthVnrSharpLib
 		}
 		public ushort Number { get; private set; }
 		public string ThreadString { get; protected set; }
-		public string HookFull { get; private set; }
 		public virtual string Text
 		{
 			get
@@ -186,7 +185,8 @@ namespace IthVnrSharpLib
 		{
 			Number = VnrProxy.TextThread_GetNumber(Id);
 			HookName = GetHookName(Parameter.pid, Parameter.hook);
-			HookFull = $"0x{Parameter.hook:X}:0x{Parameter.retn:X}:0x{Parameter.spl:X}:{HookName}";
+			HookNameless = $"0x{Parameter.hook:X}:0x{Parameter.retn:X}:0x{Parameter.spl:X}";
+			HookFull = $"{HookNameless}:{HookName}";
 			ThreadString = $"{Number:X4}:{Parameter.pid}:{HookFull}";
 			HookCode = GetLink();
 		}

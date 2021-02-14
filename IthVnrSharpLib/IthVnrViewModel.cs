@@ -46,11 +46,11 @@ namespace IthVnrSharpLib
 		public Encoding PrefEncoding { get; set; }
 		public IthVnrSettings Settings => StaticHelpers.CSettings;
 		public Brush MainTextBoxBackground => Finalized ? Brushes.DarkRed : Brushes.White;
-		public ICommand PauseOtherThreadsCommand { get; }
-		public ICommand UnpauseOtherThreadsCommand { get; }
+		public ICommand TogglePauseOthersCommand { get; }
+		public ICommand ToggleDisplayOthersCommand { get; }
 		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
-		public ICommand DontPostOthersCommand { get; }
+		public ICommand TogglePostOthersCommand { get; }
 		public GameTextThread[] GameTextThreads { get; set; } = new GameTextThread[0];
 
 
@@ -72,11 +72,11 @@ namespace IthVnrSharpLib
 
 		public IthVnrViewModel()
 		{
-			PauseOtherThreadsCommand = new IthCommandHandler(PauseOtherThreads);
-			UnpauseOtherThreadsCommand = new IthCommandHandler(UnpauseOtherThreads);
+			TogglePauseOthersCommand = new IthCommandHandler(TogglePauseOtherThreads);
+			ToggleDisplayOthersCommand = new IthCommandHandler(ToggleDisplayOtherThreads);
 			ClearThreadCommand = new IthCommandHandler(ClearThread);
 			ClearOtherThreadsCommand = new IthCommandHandler(ClearOtherThreads);
-			DontPostOthersCommand = new IthCommandHandler(DontPostOthers);
+			TogglePostOthersCommand = new IthCommandHandler(TogglePostOtherThreads);
 		}
 
 		[NotifyPropertyChangedInvocator]
@@ -88,13 +88,14 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook)
+		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook, out string errorMessage)
 		{
+			ClearThreadDisplayCollection();
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			_getPreferredHook = getPreferredHook;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
-			if (VnrProxy.Host_Open())
+			if (VnrProxy.Host_Open(out errorMessage))
 			{
 				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, getPreferredHook);
 				Application.Current.Exit += Finalize;
@@ -110,9 +111,9 @@ namespace IthVnrSharpLib
 		}
 
 
-		public void ReInitialize()
+		public void ReInitialize(out string errorMessage)
 		{
-			Initialize(_updateDisplayText, _getPreferredHook);
+			Initialize(_updateDisplayText, _getPreferredHook, out errorMessage);
 			Finalized = false;
 		}
 
@@ -121,7 +122,8 @@ namespace IthVnrSharpLib
 		/// </summary>
 		public virtual void ClearThreadDisplayCollection()
 		{
-			DisplayThreads.Clear();
+			if (Finalized) return;
+			Application.Current.Dispatcher.Invoke(()=> DisplayThreads.Clear());
 		}
 
 		/// <summary>
@@ -144,8 +146,8 @@ namespace IthVnrSharpLib
 		{
 			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.First(x => x.Tag == textThread)));
 		}
-
-		public void Finalize(object sender, ExitEventArgs e)
+		
+public void Finalize(object sender, ExitEventArgs e)
 		{
 			if (Finalized) return;
 			var exitWatch = Stopwatch.StartNew();
@@ -153,9 +155,9 @@ namespace IthVnrSharpLib
 			try
 			{
 				Settings.Save();
+				SaveGameTextThreads();
 				HookManager?.Dispose();
 				VnrProxy?.Exit();
-				SaveGameTextThreads();
 				if (IthVnrDomain != null) AppDomain.Unload(IthVnrDomain);
 			}
 			catch (Exception ex)
@@ -187,33 +189,37 @@ namespace IthVnrSharpLib
 			_updateDisplayText(this, new TextOutputEventArgs(SelectedTextThread, text, "Selected Text", false));
 		}
 
-		public void DontPostOthers()
+		public void TogglePostOtherThreads()
 		{
-			foreach (var textThread in HookManager.Threads.Values)
+			var selected = SelectedTextThread;
+			bool? toggleValue = null;
+			foreach (var thread in HookManager.Threads.Values)
 			{
-				if (textThread.IsDisplay) continue;
-				textThread.IsPosting = false;
+				if (thread == selected) continue;
+				thread.IsPosting = toggleValue ??= !thread.IsPosting;
 			}
 			OnPropertyChanged(nameof(SelectedTextThread));
 		}
 
-		public void PauseOtherThreads()
+		public void TogglePauseOtherThreads()
 		{
 			var selected = SelectedTextThread;
+			bool? toggleValue = null;
 			foreach (var thread in HookManager.Threads.Values)
 			{
 				if (thread == selected) continue;
-				thread.IsPaused = true;
+				thread.IsPaused = toggleValue ??= !thread.IsPaused;
 			}
 		}
 
-		public void UnpauseOtherThreads()
+		public void ToggleDisplayOtherThreads()
 		{
 			var selected = SelectedTextThread;
+			bool? toggleValue = null;
 			foreach (var thread in HookManager.Threads.Values)
 			{
 				if (thread == selected) continue;
-				thread.IsPaused = false;
+				thread.IsDisplay = toggleValue ??= !thread.IsDisplay;
 			}
 		}
 
@@ -238,10 +244,10 @@ namespace IthVnrSharpLib
 
 		public void InitVnrProxy()
 		{
-			var path = Path.GetFullPath(@"IthVnrSharpLib.dll");
+			var path = Path.GetFullPath($@"{nameof(IthVnrSharpLib)}.dll");
 			var assembly = Assembly.LoadFile(path);
 			IthVnrDomain = AppDomain.CreateDomain(@"StaticMethodsIthVnrAppDomain");
-			VnrProxy = (VNR)IthVnrDomain.CreateInstanceAndUnwrap(assembly.FullName, @"IthVnrSharpLib.VNR");
+			VnrProxy = (VNR)IthVnrDomain.CreateInstanceAndUnwrap(assembly.FullName, $@"{nameof(IthVnrSharpLib)}.{nameof(VNR)}");
 		}
 
 		public virtual void AddGameThread(GameTextThread gameTextThread)

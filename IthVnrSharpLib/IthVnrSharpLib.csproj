@@ -91,6 +91,7 @@
     <Compile Include="Structs.cs" />
     <Compile Include="TextThread.cs" />
     <Compile Include="IthVnrViewModel.cs" />
+    <Compile Include="ThreadTable.cs" />
     <Compile Include="VNR.cs" />
     <Compile Include="WinAPI.cs" />
   </ItemGroup>

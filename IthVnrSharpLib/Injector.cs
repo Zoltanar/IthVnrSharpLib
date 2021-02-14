@@ -5,7 +5,7 @@ using System.Text;
 
 namespace IthVnrSharpLib
 {
-	static class Injector
+	internal static class Injector
 	{
 		public static bool InjectIntoProcess(uint processId)
 		{

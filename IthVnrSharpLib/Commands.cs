@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace IthVnrSharpLib
 {
@@ -28,7 +29,11 @@ namespace IthVnrSharpLib
 			_hookManager.ConsoleOutput($"Processing command '{cmd}'...", true);
 			if (ProcessNameRegex.IsMatch(cmd)) AttachWithProcessName(cmd);
 			else if (ProcessRegex.IsMatch(cmd)) AttachWithProcessId(cmd);
-			else if (HookRegex.IsMatch(cmd)) AddHookCode(cmd, pid);
+			else if (HookRegex.IsMatch(cmd))
+			{
+				var result = AddHookCode(cmd, pid);
+				if (!result) _hookManager.ConsoleOutput($"Failed to add hook code '{cmd}'", true);
+			}
 			else if (LinkRegex.IsMatch(cmd)) LinkThreads(cmd);
 			else if (UnlinkRegex.IsMatch(cmd)) UnlinkThread(cmd);
 			else if (HelpRegex.IsMatch(cmd)) _hookManager.ConsoleOutput(CommandUsage, true);
@@ -62,7 +67,7 @@ namespace IthVnrSharpLib
 				return;
 			}
 			var thread = _hookManager.Threads.Values.FirstOrDefault(x => x.Number == threadId);
-			if(thread == null)_hookManager.ConsoleOutput($"Failed to find thread with Id '{threadId}'.", true);
+			if (thread == null) _hookManager.ConsoleOutput($"Failed to find thread with Id '{threadId}'.", true);
 			else
 			{
 				thread.LinkTo = null;
@@ -84,12 +89,15 @@ namespace IthVnrSharpLib
 			//_vnrProxy.Host_AddLink(fromThread, toThread);
 		}
 
-		private unsafe void AddHookCode(string cmd, int pid)
+		private unsafe bool AddHookCode(string cmd, int pid)
 		{
-			HookParam hp = new HookParam();
+			var hp = new HookParam();
 			_stopGarbageCollection.Add(hp);
-			if (!HookParam.Parse(cmd.Substring(2), ref hp)) return;
-			_vnrProxy.Host_InsertHook(pid, (IntPtr)(&hp), null);
+			if (!HookParam.Parse(cmd.Substring(2), ref hp)) return false;
+			var hookParamPointer = (IntPtr) (&hp);
+			var insertHookTask = Task.Run(()=> _vnrProxy.Host_InsertHook(pid, hookParamPointer, null));
+			var success = insertHookTask.Wait(5000);
+			return success;
 		}
 
 		private void AttachWithProcessId(string cmd)

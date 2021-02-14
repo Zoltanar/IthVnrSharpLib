@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 // ReSharper disable FieldCanBeMadeReadOnly.Local
 // ReSharper disable FieldCanBeMadeReadOnly.Global
+// ReSharper disable IdentifierTypo
+// ReSharper disable InconsistentNaming
 
 namespace IthVnrSharpLib
 {
@@ -47,6 +49,9 @@ namespace IthVnrSharpLib
 		// 7/20/2014: jichi additional parameters for PSP games
 		public uint user_flags, user_value;
 
+		/// <summary>
+		/// Ported from profile\misc.cpp
+		/// </summary>
 		public static bool Parse(string cmd, ref HookParam hp)
 		{
 			unchecked
@@ -65,14 +70,14 @@ namespace IthVnrSharpLib
 				}
 				else
 				{
-					switch (m[1].Value.ToUpperInvariant()[0])
+					switch (char.ToUpperInvariant(m[1].Value[0]))
 					{
 						case 'S':
 							hp.type |= (uint)HookParamType.USING_STRING;
 							break;
 						case 'E':
 							hp.type |= (uint)HookParamType.STRING_LAST_CHAR;
-							break;
+							goto case 'A';
 						case 'A':
 							hp.type |= (uint)HookParamType.BIG_ENDIAN;
 							hp.length_offset = 1;
@@ -82,10 +87,13 @@ namespace IthVnrSharpLib
 							break;
 						case 'H':
 							hp.type |= (uint)HookParamType.PRINT_DWORD;
-							break;
+							goto case 'Q';
 						case 'Q':
 							hp.type |= (uint)HookParamType.USING_STRING | (uint)HookParamType.USING_UNICODE;
 							break;
+						case 'L':
+							hp.type |= (uint)HookParamType.STRING_LAST_CHAR;
+							goto case 'W';
 						case 'W':
 							hp.type |= (uint)HookParamType.USING_UNICODE;
 							hp.length_offset = 1;
@@ -94,8 +102,8 @@ namespace IthVnrSharpLib
 				}
 
 				// [data_offset[*drdo]]
-				string data_offset = "(-?[A-Fa-f0-9]+)";
-				string drdo = "(\\*-?[A-Fa-f0-9]+)?";
+				const string data_offset = "(-?[A-Fa-f0-9]+)";
+				const string drdo = "(\\*-?[A-Fa-f0-9]+)?";
 				rx = new Regex("^" + data_offset + drdo, RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
 				result = m1.Count != 0;
@@ -113,9 +121,9 @@ namespace IthVnrSharpLib
 				}
 
 				// [:sub_offset[*drso]]
-				string sub_offset = "(-?[A-Fa-f0-9]+)";
-				string drso = "(\\*-?[A-Fa-f0-9]+)?";
-				rx = new Regex("^" + sub_offset + drso, RegexOptions.IgnoreCase);
+				const string sub_offset = "(-?[A-Fa-f0-9]+)";
+				const string drso = "(\\*-?[A-Fa-f0-9]+)?";
+				rx = new Regex($"^{sub_offset}{drso}", RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
 				result = m1.Count != 0;
 				if (result)
@@ -152,7 +160,7 @@ namespace IthVnrSharpLib
 				string module = @"([\x21-\x7E]+)";
 				string name = @"[\x21-\x7E]+";
 				string ordinal = "\\d+";
-				rx = new Regex("^:(" + module + "(:" + name + "|#" + ordinal + ")?)?$", RegexOptions.IgnoreCase);
+				rx = new Regex($"^:({module}(:{name}|#{ordinal})?)?$", RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
 				result = m1.Count != 0;
 				if (result) // :[module[:{name|#ordinal}]]
@@ -202,12 +210,10 @@ namespace IthVnrSharpLib
 		private static uint Hash(string module)
 		{
 			uint hash = 0;
-			using (var it = module.GetEnumerator())
+			using var it = module.GetEnumerator();
+			while (it.MoveNext())
 			{
-				while (it.MoveNext())
-				{
-					hash = _rotr(hash, 7) + it.Current;
-				}
+				hash = _rotr(hash, 7) + it.Current;
 			}
 			return hash;
 		}

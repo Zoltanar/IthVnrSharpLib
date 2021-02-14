@@ -8,7 +8,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
 using IthVnrSharpLib.Properties;
 
 namespace IthVnrSharpLib
@@ -27,8 +26,10 @@ namespace IthVnrSharpLib
 		// ReSharper restore PrivateFieldCanBeConvertedToLocalVariable
 
 		private readonly IthVnrViewModel _viewModel;
-		private readonly VNR _vnrProxy;
+		public readonly VNR VnrProxy;
 		public readonly IntPtr HookManager;
+		private readonly ThreadTableWrapper _threadTable;
+
 		private bool _mergeByHookCode;
 		public readonly ConsoleThread ConsoleThread;
 		public ConcurrentDictionary<IntPtr, TextThread> Threads { get; } = new();
@@ -101,14 +102,13 @@ namespace IthVnrSharpLib
 
 		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, GetPreferredHookEvent getPreferredHook)
 		{
-			_vnrProxy = vnrProxy;
+			VnrProxy = vnrProxy;
 			TextThread.GetPreferredHook = getPreferredHook;
 			TextThread.UpdateDisplay = updateDisplayText;
 			TextThread.VnrProxy = vnrProxy;
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
 			_viewModel = propertyChangedNotifier;
 			TextThread.ViewModel = _viewModel;
-			TextThread.HookManager = HookManager;
 			//save callbacks so they dont get GC'd
 			_threadOutput = ThreadOutput;
 			_threadCreate = ThreadCreate;
@@ -118,23 +118,24 @@ namespace IthVnrSharpLib
 			_threadReset = ThreadReset;
 			//end of callback section
 			Host_GetHookManager(ref HookManager);
+			_threadTable = new ThreadTableWrapper(this, VnrProxy.HookManager_GetThreadTable(HookManager));
 			HookManager_RegisterThreadCreateCallback(_threadCreate);
 			HookManager_RegisterThreadRemoveCallback(_threadRemove);
 			HookManager_RegisterThreadResetCallback(_threadReset);
-			IntPtr console = HookManager_FindSingle(0);
+			IntPtr console = _threadTable.FindThread(0);
 			ConsoleThread = new ConsoleThread { Id = console };
 			Threads[console] = ConsoleThread;
 			_viewModel.AddNewThreadToDisplayCollection(ConsoleThread);
 			TextThread_RegisterOutputCallBack(console, _threadOutput, IntPtr.Zero);
 			HookManager_RegisterProcessAttachCallback(_registerProcessList);
 			HookManager_RegisterProcessDetachCallback(_removeProcessList);
-			_vnrProxy.Host_Start();
+			VnrProxy.Host_Start();
 			ConsoleOutput(StaticHelpers.VersionInfo, true);
 		}
 
-		private void HookManager_RegisterProcessAttachCallback(VNR.ProcessEventCallback callback) => _vnrProxy.HookManager_RegisterProcessAttachCallback(HookManager, callback);
+		private void HookManager_RegisterProcessAttachCallback(VNR.ProcessEventCallback callback) => VnrProxy.HookManager_RegisterProcessAttachCallback(HookManager, callback);
 
-		private void HookManager_RegisterProcessDetachCallback(VNR.ProcessEventCallback callback) => _vnrProxy.HookManager_RegisterProcessDetachCallback(HookManager, callback);
+		private void HookManager_RegisterProcessDetachCallback(VNR.ProcessEventCallback callback) => VnrProxy.HookManager_RegisterProcessDetachCallback(HookManager, callback);
 
 		public void ConsoleOutput(string text, bool show)
 		{
@@ -147,15 +148,14 @@ namespace IthVnrSharpLib
 			if (thread.IsDisplay) thread.OnPropertyChanged(nameof(TextThread.Text));
 		}
 
-		private IntPtr TextThread_GetThreadParameter(IntPtr thread) => _vnrProxy.TextThread_GetThreadParameter(thread);
+		private IntPtr TextThread_GetThreadParameter(IntPtr thread) => VnrProxy.TextThread_GetThreadParameter(thread);
 
-		private void HookManager_RegisterThreadCreateCallback(VNR.ThreadEventCallback threadCreate) => _vnrProxy.HookManager_RegisterThreadCreateCallback(HookManager, threadCreate);
-		private void HookManager_RegisterThreadRemoveCallback(VNR.ThreadEventCallback threadRemove) => _vnrProxy.HookManager_RegisterThreadRemoveCallback(HookManager, threadRemove);
-		private void HookManager_RegisterThreadResetCallback(VNR.ThreadEventCallback threadReset) => _vnrProxy.HookManager_RegisterThreadResetCallback(HookManager, threadReset);
-
-		private IntPtr HookManager_FindSingle(int number) => _vnrProxy.HookManager_FindSingle(HookManager, number);
-		private void TextThread_RegisterOutputCallBack(IntPtr textThread, VNR.ThreadOutputFilterCallback callback, IntPtr data) => _vnrProxy.TextThread_RegisterOutputCallBack(textThread, callback, data);
-		private void Host_GetHookManager(ref IntPtr hookManager) => _vnrProxy.Host_GetHookManager(ref hookManager);
+		private void HookManager_RegisterThreadCreateCallback(VNR.ThreadEventCallback threadCreate) => VnrProxy.HookManager_RegisterThreadCreateCallback(HookManager, threadCreate);
+		private void HookManager_RegisterThreadRemoveCallback(VNR.ThreadEventCallback threadRemove) => VnrProxy.HookManager_RegisterThreadRemoveCallback(HookManager, threadRemove);
+		private void HookManager_RegisterThreadResetCallback(VNR.ThreadEventCallback threadReset) => VnrProxy.HookManager_RegisterThreadResetCallback(HookManager, threadReset);
+		
+		private void TextThread_RegisterOutputCallBack(IntPtr textThread, VNR.ThreadOutputFilterCallback callback, IntPtr data) => VnrProxy.TextThread_RegisterOutputCallBack(textThread, callback, data);
+		private void Host_GetHookManager(ref IntPtr hookManager) => VnrProxy.Host_GetHookManager(ref hookManager);
 
 		private int ThreadReset(IntPtr threadPointer)
 		{
@@ -223,10 +223,11 @@ namespace IthVnrSharpLib
 		private void InitialiseThread(TextThread thread)
 		{
 			var savedThread =
-				_viewModel.GameTextThreads.FirstOrDefault(t => /*t.HookCode == thread.HookCode ||*/ t.HookFull.ToLowerInvariant() == thread.HookFull.ToLowerInvariant());
+				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull,thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
+				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookNameless, thread.HookNameless, StringComparison.OrdinalIgnoreCase));
 			if (savedThread == null)
 			{
-				var hookThreads = _viewModel.GameTextThreads.Where(t => t.HookCode.ToLowerInvariant() == thread.HookCode.ToLowerInvariant()).ToList();
+				var hookThreads = _viewModel.GameTextThreads.Where(t => string.Equals(t.HookCode, thread.HookCode, StringComparison.OrdinalIgnoreCase)).ToList();
 				if (hookThreads.Any())
 				{
 					var encoding = new Dictionary<string, int>();
@@ -241,21 +242,21 @@ namespace IthVnrSharpLib
 						isPausedCounter += hookThread.IsPaused ? 1 : -1;
 						isPostingCounter += hookThread.IsPosting ? 1 : -1;
 					}
-					savedThread = new GameTextThread()
+					savedThread = new GameTextThread(thread)
 					{
 						Encoding = encoding.OrderByDescending(p=>p.Value).First().Key,
 						//ties default to displaying/posting
 						IsDisplay = isDisplayCounter >= 0,
 						IsPaused = isPausedCounter > 0,  
 						IsPosting = isPostingCounter >= 0,
-						HookCode = thread.HookCode,
-						HookFull = thread.HookFull
 					};
+					ConsoleOutput($"Found new thread '{thread.HookFull}', using existing threads with same Hook Code '{thread.HookCode}': {savedThread.Options}",true);
 					_viewModel.AddGameThread(savedThread);
 				}
 			}
 			if (savedThread != null)
 			{
+				ConsoleOutput($"Found saved thread '{thread.HookFull}': {savedThread.Options}", true);
 				thread.GameThread = savedThread;
 				thread.IsDisplay = savedThread.IsDisplay;
 				thread.IsPaused = savedThread.IsPaused;
@@ -272,7 +273,7 @@ namespace IthVnrSharpLib
 				thread.SetEncoding(prefEncoding);
 				return;
 			}
-			var gameTextThread = new GameTextThread { HookCode = thread.HookCode, HookFull = thread.HookFull };
+			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
 			_viewModel.AddGameThread(gameTextThread);
 			//select this thread if none/console selected, or if its preferred hook code or if its filepath hook and there exists no preferred hook
@@ -281,10 +282,12 @@ namespace IthVnrSharpLib
 			if (Paused)
 			{
 				thread.IsPaused = true;
+				ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
 				return;
 			}
 			thread.IsPosting = PostNewThread(thread);
 			if(thread.IsPosting) UpdateDisplayThread(thread);
+			ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
 		}
 
 		private bool PostNewThread(TextThread thread)
@@ -295,7 +298,7 @@ namespace IthVnrSharpLib
 		private void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
-			IntPtr pr = _vnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
+			IntPtr pr = VnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
 			thread.ProcessRecordPtr = pr;
 			thread.SetUnicodeStatus(pr, thread.Parameter.hook);
 			thread.SetEntryString();
@@ -341,9 +344,9 @@ namespace IthVnrSharpLib
 
 		private int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
 		{
-			if (Paused || len == 0 || _viewModel.IsPaused) return len;
+			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			GetOrCreateThread(threadPointer, out var thread);
-			if (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay) return len;
+			if (!ShowLatestThread && (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay)) return len;
 			if (newLine)
 			{
 				//thread.CloseByteSection(this, null);
@@ -358,7 +361,7 @@ namespace IthVnrSharpLib
 			if (ShowLatestThread)
 			{
 				_viewModel.SelectedTextThread = thread;
-				thread.IsPosting = true;
+				thread.IsDisplay = true;
 			}
 			UpdateDisplayThread(thread);
 			return len;
@@ -372,7 +375,7 @@ namespace IthVnrSharpLib
 				textThread.Value.Bytes.Clear();
 			}
 			Threads.Clear();
-			Application.Current.Dispatcher.Invoke(() => _viewModel.DisplayThreads.Clear());
+			_viewModel.ClearThreadDisplayCollection();
 			HookManager_RegisterThreadCreateCallback(null);
 			HookManager_RegisterThreadRemoveCallback(null);
 			HookManager_RegisterThreadResetCallback(null);

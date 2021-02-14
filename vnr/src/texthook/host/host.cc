@@ -637,8 +637,10 @@ extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterConsoleCallback(HookManage
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessNewHookCallback(HookManager* ptr, ProcessEventCallback data) { ptr->RegisterProcessNewHookCallback(data); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessDetachCallback(HookManager* ptr, ProcessEventCallback data) { ptr->RegisterProcessDetachCallback(data); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessAttachCallback(HookManager* ptr, ProcessEventCallback data) { ptr->RegisterProcessAttachCallback(data); }
-extern "C" IHFSERVICE VOID IHFAPI HookManager_AddConsoleOutput(HookManager* ptr, LPCWSTR text) { man->AddConsoleOutput(text); }
-extern "C" IHFSERVICE VOID IHFAPI HookManager_FindSingle(HookManager* ptr, DWORD number) { ptr->FindSingle(number); }
+extern "C" IHFSERVICE VOID IHFAPI HookManager_AddConsoleOutput(HookManager* ptr, LPCWSTR text) { ptr->AddConsoleOutput(text); }
+extern "C" IHFSERVICE ThreadTable* IHFAPI HookManager_GetThreadTable(HookManager * ptr) { return ptr->Table(); }
+extern "C" IHFSERVICE VOID IHFAPI HookManager_FindSingle(HookManager * ptr, DWORD number) { ptr->FindSingle(number); }
+extern "C" IHFSERVICE TextThread* IHFAPI ThreadTable_FindTextThread(ThreadTable * ptr, DWORD number) { return ptr->FindThread(number); }
 extern "C" IHFSERVICE DWORD IHFAPI TextThread_GetStatus(TextThread* ptr) { return ptr->Status(); }
 extern "C" IHFSERVICE VOID IHFAPI TextThread_SetStatus(TextThread* ptr, DWORD status) { ptr->Status() = status; }
 extern "C" IHFSERVICE WORD IHFAPI TextThread_GetNumber(TextThread* ptr) { return ptr->Number(); }
@@ -648,8 +650,7 @@ extern "C" IHFSERVICE DWORD IHFAPI Host_GetHookName(LPSTR ptr, DWORD parameterPi
 
 bool GetHookParam(DWORD pid, DWORD hook_addr, HookParam& hp)
 {
-	if (!pid)
-		return false;
+	if (!pid)	return false;
 	ProcessRecord *pr = ::man->GetProcessRecord(pid);
 	if (!pr)
 		return false;
