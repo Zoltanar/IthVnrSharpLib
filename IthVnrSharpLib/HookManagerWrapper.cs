@@ -24,7 +24,7 @@ namespace IthVnrSharpLib
 		private VNR.ThreadEventCallback _threadRemove;
 		private VNR.ThreadEventCallback _threadReset;
 		// ReSharper restore PrivateFieldCanBeConvertedToLocalVariable
-
+		
 		private readonly IthVnrViewModel _viewModel;
 		public readonly VNR VnrProxy;
 		public readonly IntPtr HookManager;
@@ -100,10 +100,9 @@ namespace IthVnrSharpLib
 			ResetDisplayCollection();
 		}
 
-		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, GetPreferredHookEvent getPreferredHook)
+		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy)
 		{
 			VnrProxy = vnrProxy;
-			TextThread.GetPreferredHook = getPreferredHook;
 			TextThread.UpdateDisplay = updateDisplayText;
 			TextThread.VnrProxy = vnrProxy;
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
@@ -225,35 +224,6 @@ namespace IthVnrSharpLib
 			var savedThread =
 				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull,thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
 				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookNameless, thread.HookNameless, StringComparison.OrdinalIgnoreCase));
-			if (savedThread == null)
-			{
-				var hookThreads = _viewModel.GameTextThreads.Where(t => string.Equals(t.HookCode, thread.HookCode, StringComparison.OrdinalIgnoreCase)).ToList();
-				if (hookThreads.Any())
-				{
-					var encoding = new Dictionary<string, int>();
-					var isDisplayCounter = 0;
-					var isPausedCounter = 0;
-					var isPostingCounter = 0;
-					foreach (var hookThread in hookThreads)
-					{
-						if (!encoding.ContainsKey(hookThread.Encoding)) encoding[hookThread.Encoding] = 0;
-						encoding[hookThread.Encoding]++;
-						isDisplayCounter += hookThread.IsDisplay ? 1 : -1;
-						isPausedCounter += hookThread.IsPaused ? 1 : -1;
-						isPostingCounter += hookThread.IsPosting ? 1 : -1;
-					}
-					savedThread = new GameTextThread(thread)
-					{
-						Encoding = encoding.OrderByDescending(p=>p.Value).First().Key,
-						//ties default to displaying/posting
-						IsDisplay = isDisplayCounter >= 0,
-						IsPaused = isPausedCounter > 0,  
-						IsPosting = isPostingCounter >= 0,
-					};
-					ConsoleOutput($"Found new thread '{thread.HookFull}', using existing threads with same Hook Code '{thread.HookCode}': {savedThread.Options}",true);
-					_viewModel.AddGameThread(savedThread);
-				}
-			}
 			if (savedThread != null)
 			{
 				ConsoleOutput($"Found saved thread '{thread.HookFull}': {savedThread.Options}", true);
@@ -276,29 +246,16 @@ namespace IthVnrSharpLib
 			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
 			_viewModel.AddGameThread(gameTextThread);
-			//select this thread if none/console selected, or if its preferred hook code or if its filepath hook and there exists no preferred hook
-			var defaults = thread.GetDefaults();
-			if (defaults.PrefEncoding != null) thread.SetEncoding(defaults.PrefEncoding);
-			if (Paused)
-			{
-				thread.IsPaused = true;
-				ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
-				return;
-			}
-			thread.IsPosting = PostNewThread(thread);
-			if(thread.IsPosting) UpdateDisplayThread(thread);
+			thread.SetEncoding(_viewModel.PrefEncoding);
+			thread.IsPosting = ShowLatestThread;
+			if(thread.IsPosting && !Paused) UpdateDisplayThread(thread);
 			ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
-		}
-
-		private bool PostNewThread(TextThread thread)
-		{
-			return ShowLatestThread || _viewModel.SelectedTextThread == null || thread.IsPreferred;
 		}
 		
 		private void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
-			IntPtr pr = VnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
+			var pr = VnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
 			thread.ProcessRecordPtr = pr;
 			thread.SetUnicodeStatus(pr, thread.Parameter.hook);
 			thread.SetEntryString();
@@ -413,6 +370,17 @@ namespace IthVnrSharpLib
 		public void OnPropertyChanged([CallerMemberName] string propertyName = null)
 		{
 			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+		}
+
+		public void FindThreadWithText(string searchTerm)
+		{
+			foreach (var thread in Threads.Values)
+			{
+				if (thread.IsConsole) continue;
+				var textLines = thread.Text.Split(new [] {Environment.NewLine}, StringSplitOptions.None);
+				var firstLineWith = textLines.FirstOrDefault(l => l.Contains(searchTerm));
+				if (firstLineWith != null) ConsoleOutput($"Found text in thread {thread.EntryString}: {firstLineWith}", true);
+			}
 		}
 	}
 

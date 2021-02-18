@@ -1,4 +1,6 @@
-﻿namespace IthVnrSharpLib
+﻿using IthVnrSharpLib.Properties;
+
+namespace IthVnrSharpLib
 {
 	public class GameTextThread
 	{
@@ -12,6 +14,7 @@
 		public string HookFull { get; set; }
 		public string Encoding { get; set; }
 
+		[UsedImplicitly]
 		public GameTextThread()
 		{
 			

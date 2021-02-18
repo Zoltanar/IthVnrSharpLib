@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
 using System.Windows;
@@ -16,12 +17,10 @@ using Timer = System.Timers.Timer;
 
 namespace IthVnrSharpLib
 {
-	public delegate (string HookCode, Encoding PrefEncoding) GetPreferredHookEvent(uint processId);
 	public delegate bool TextOutputEvent(object sender, TextOutputEventArgs e);
 
 	public class TextThread : INotifyPropertyChanged
 	{
-		public static GetPreferredHookEvent GetPreferredHook;
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		public static Func<bool> CopyToClipboardFunc;
@@ -29,7 +28,8 @@ namespace IthVnrSharpLib
 		public static IthVnrViewModel ViewModel;
 		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
 		private const uint MaxHook = 64;
-		
+		private static readonly Regex LatinOnlyRegex = new(@"^[a-zA-Z0-9:\/\\\r\n .!?,;@()_$^""]+$");
+
 		public bool Removed { get; set; }
 		public IntPtr Id { get; set; }
 		public virtual bool IsConsole { get; set; }
@@ -118,16 +118,6 @@ namespace IthVnrSharpLib
 				return result;
 			}
 		}
-		public (string HookCode, Encoding PrefEncoding) GetDefaults() => GetPreferredHook(Parameter.pid);
-
-		public bool IsPreferred
-		{
-			get
-			{
-				var defaults = GetDefaults();
-				return defaults.HookCode != null && defaults.HookCode == HookCode;
-			}
-		}
 
 		public TextThread LinkTo { get; set; }
 		public IntPtr ProcessRecordPtr { get; set; }
@@ -135,14 +125,14 @@ namespace IthVnrSharpLib
 		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
 		public GameTextThread GameThread { get; set; }
 
-		private static readonly object TimerTickLock = new object();
+		private static readonly object TimerTickLock = new ();
 		private Timer _timer;
 		private DateTime _lastUpdateTime = DateTime.MinValue;
 		private byte[] _lastUpdateBytes;
 		private Thread _monitorThread;
 		private bool _isPosting;
 		private bool _isPaused;
-		private readonly Dictionary<DateTime, int> _monitorPairs = new Dictionary<DateTime, int>();
+		private readonly Dictionary<DateTime, int> _monitorPairs = new ();
 		private bool _isDisplay = true;
 		private Encoding _prefEncoding = Encoding.Unicode;
 
@@ -358,13 +348,11 @@ namespace IthVnrSharpLib
 		{
 			while (true)
 			{
-				if (MonitorLoop()) break;
-				if (ViewModel == null) break;
-				if (Removed) break;
+				if (ViewModel == null || Removed || MonitorLoop()) break;
 				Thread.Sleep(1000);
 			}
 			_monitorPairs.Clear();
-			if (IsDisplay) ViewModel?.OnPropertyChanged(nameof(ViewModel.SelectedTextThread));
+			if (IsDisplay) OnPropertyChanged(nameof(Text));
 			_monitorThread = null;
 		}
 
@@ -373,7 +361,6 @@ namespace IthVnrSharpLib
 		/// </summary>
 		private bool MonitorLoop()
 		{
-			if (IsPreferred) return true;
 			if (IsPaused) return true;
 			if (_monitorPairs.Count > 20) _monitorPairs.Clear();
 			_monitorPairs[DateTime.UtcNow] = Bytes.AggregateCount + CurrentBytes.Count;
@@ -384,6 +371,7 @@ namespace IthVnrSharpLib
 			var lpsList = new List<double>();
 			foreach (var pair in list)
 			{
+				if (ViewModel == null || Removed || IsPaused) return true;
 				if (startTime == default)
 				{
 					startTime = pair.Key;
@@ -396,16 +384,6 @@ namespace IthVnrSharpLib
 				startLength = pair.Value;
 			}
 			var lengthPerSecond = lpsList.Average();
-			/*var secondsPassed = (_monitorEndPair.Time - _monitorStartPair.Time).TotalSeconds;
-			if (secondsPassed < 2) return false;
-			if (secondsPassed > 30)
-			{
-				_monitorStartPair = default((DateTime Time, int Count));
-				_monitorEndPair = default((DateTime Time, int Count));
-				return false;
-			}
-			var totalLength = _monitorEndPair.Count - _monitorStartPair.Count;
-			var lengthPerSecond = totalLength / secondsPassed;*/
 			if (lengthPerSecond < 500) return false;
 			IsPaused = true;
 			return true;

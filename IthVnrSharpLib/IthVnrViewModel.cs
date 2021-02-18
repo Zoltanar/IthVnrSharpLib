@@ -67,7 +67,6 @@ namespace IthVnrSharpLib
 		}
 
 		private TextOutputEvent _updateDisplayText;
-		private GetPreferredHookEvent _getPreferredHook;
 		private bool _finalized;
 
 		public IthVnrViewModel()
@@ -88,16 +87,15 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, GetPreferredHookEvent getPreferredHook, out string errorMessage)
+		public void Initialize(TextOutputEvent updateDisplayText, out string errorMessage)
 		{
 			ClearThreadDisplayCollection();
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
-			_getPreferredHook = getPreferredHook;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			if (VnrProxy.Host_Open(out errorMessage))
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, getPreferredHook);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy);
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(HookManager, VnrProxy);
 			}
@@ -113,7 +111,7 @@ namespace IthVnrSharpLib
 
 		public void ReInitialize(out string errorMessage)
 		{
-			Initialize(_updateDisplayText, _getPreferredHook, out errorMessage);
+			Initialize(_updateDisplayText, out errorMessage);
 			Finalized = false;
 		}
 

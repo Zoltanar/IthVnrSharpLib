@@ -11,12 +11,13 @@ namespace IthVnrSharpLib
 	{
 		private readonly HookManagerWrapper _hookManager;
 		private readonly VNR _vnrProxy;
-		private Regex ProcessNameRegex { get; } = new Regex("/pn(.+)", RegexOptions.IgnoreCase);
-		private Regex ProcessRegex { get; } = new Regex("/p(.+)", RegexOptions.IgnoreCase);
-		private Regex HookRegex { get; } = new Regex("/h(.+)", RegexOptions.IgnoreCase);
-		private Regex LinkRegex { get; } = new Regex(":l(.+)", RegexOptions.IgnoreCase);
-		private Regex UnlinkRegex { get; } = new Regex(":u(.+)", RegexOptions.IgnoreCase);
-		private Regex HelpRegex { get; } = new Regex("(:h|:help)", RegexOptions.IgnoreCase);
+		private Regex ProcessNameRegex { get; } = new ("/pn(.+)", RegexOptions.IgnoreCase);
+		private Regex ProcessRegex { get; } = new ("/p(.+)", RegexOptions.IgnoreCase);
+		private Regex HookRegex { get; } = new ("/h(.+)", RegexOptions.IgnoreCase);
+		private Regex LinkRegex { get; } = new (":l(.+)", RegexOptions.IgnoreCase);
+		private Regex UnlinkRegex { get; } = new (":u(.+)", RegexOptions.IgnoreCase);
+		private Regex HelpRegex { get; } = new ("(:h|:help)", RegexOptions.IgnoreCase);
+		private Regex SearchRegex { get; } = new ("(:s|:search) (.+)", RegexOptions.IgnoreCase);
 
 		public Commands(HookManagerWrapper hookManager, VNR vnrProxy)
 		{
@@ -27,6 +28,7 @@ namespace IthVnrSharpLib
 		public void ProcessCommand(string cmd, int pid)
 		{
 			_hookManager.ConsoleOutput($"Processing command '{cmd}'...", true);
+			Match searchMatch;
 			if (ProcessNameRegex.IsMatch(cmd)) AttachWithProcessName(cmd);
 			else if (ProcessRegex.IsMatch(cmd)) AttachWithProcessId(cmd);
 			else if (HookRegex.IsMatch(cmd))
@@ -37,6 +39,7 @@ namespace IthVnrSharpLib
 			else if (LinkRegex.IsMatch(cmd)) LinkThreads(cmd);
 			else if (UnlinkRegex.IsMatch(cmd)) UnlinkThread(cmd);
 			else if (HelpRegex.IsMatch(cmd)) _hookManager.ConsoleOutput(CommandUsage, true);
+			else if ((searchMatch = SearchRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value);
 			else _hookManager.ConsoleOutput("Unrecognized command.", true);
 		}
 
@@ -86,7 +89,6 @@ namespace IthVnrSharpLib
 				return;
 			}
 			_hookManager.AddLink(fromThread, toThread);
-			//_vnrProxy.Host_AddLink(fromThread, toThread);
 		}
 
 		private unsafe bool AddHookCode(string cmd, int pid)
