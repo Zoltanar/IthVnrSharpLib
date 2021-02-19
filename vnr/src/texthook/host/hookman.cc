@@ -26,19 +26,6 @@ namespace { // unnamed
 //enum { MAX_ENTRY = 0x40 };
 
 #define HM_LOCK win_mutex_lock<HookManager::mutex_type> d_locker(hmcs) // Synchronized scope for accessing private data
-// jichi 9/23/2013: wine deficenciy on mapping sections
-// Whe set to false, do not map sections.
-//bool ith_has_section = true;
-
-// jichi 9/28/2013: Remove ConsoleOutput from available hooks
-//LPWSTR HookNameInitTable[]={ L"ConsoleOutput" , HOOK_FUN_NAME_LIST };
-//LPCWSTR HookNameInitTable[] = {HOOK_FUN_NAME_LIST};
-//LPVOID DefaultHookAddr[HOOK_FUN_COUNT];
-
-//BYTE null_buffer[4]={0,0,0,0};
-//BYTE static_small_buffer[0x100];
-//DWORD zeros[4]={0,0,0,0};
-//WCHAR user_entry[0x40];
 
 bool GetProcessPath(HANDLE hProc, __out LPWSTR path)
 {
@@ -111,51 +98,23 @@ DWORD GetHookName(LPSTR str, DWORD pid, DWORD hook_addr, DWORD max)
   return len;
 }
 
-// 7/2/2015 jichi: This function is not used and removed
-//int GetHookNameByIndex(LPSTR str, DWORD pid, DWORD index)
-//{
-//  if (!pid)
-//    return 0;
-//
-//  //if (pid == 0) {
-//  //  wcscpy(str, HookNameInitTable[0]);
-//  //  return wcslen(HookNameInitTable[0]);
-//  //}
-//  DWORD len = 0;
-//  //::man->LockProcessHookman(pid);
-//  ProcessRecord *pr = ::man->GetProcessRecord(pid);
-//  if (!pr)
-//    return 0;
-//  //NtWaitForSingleObject(pr->hookman_mutex,0,0); //already locked
-//  Hook *hks = (Hook *)pr->hookman_map;
-//  if (hks[index].Address()) {
-//    NtReadVirtualMemory(pr->process_handle, hks[index].Name(), str, hks[index].NameLength() << 1, &len);
-//    len = hks[index].NameLength();
-//  }
-//  //NtReleaseMutant(pr->hookman_mutex,0);
-//  return len;
-//}
-
-//int GetHookString(LPWSTR str, DWORD pid, DWORD hook_addr, DWORD status)
-//{
-//  LPWSTR begin=str;
-//  str+=swprintf(str,L"%4d:0x%08X:",pid,hook_addr);
-//  str+=GetHookName(str,pid,hook_addr);
-//  return str-begin;
-//}
-
 void ThreadTable::SetThread(DWORD num, TextThread *ptr)
 {
+  if (SetThreadExt) 
+  {
+    SetThreadExt(num, ptr);
+    return;
+  }
   int number = num;
   if (number >= size) {
     while (number >= size)
       size <<= 1;
-    TextThread **temp;
+    TextThread** temp;
     //if (size < 0x10000) {
-      temp = new TextThread*[size];
-      if (size > used)
-        ::memset(temp, 0, (size - used) * sizeof(TextThread *)); // jichi 9/21/2013: zero memory
-      memcpy(temp, storage, used * sizeof(TextThread *));
+    temp = new TextThread * [size];
+    if (size > used)
+      ::memset(temp, 0, (size - used) * sizeof(TextThread*)); // jichi 9/21/2013: zero memory
+    memcpy(temp, storage, used * sizeof(TextThread*));
     //}
     delete[] storage;
     storage = temp;
@@ -165,12 +124,13 @@ void ThreadTable::SetThread(DWORD num, TextThread *ptr)
     if (number == used - 1)
       while (storage[used - 1] == 0)
         used--;
-  } else if (number >= used)
-    used = number + 1;
+  }
+  else if (number >= used) used = number + 1;
 }
 
 TextThread *ThreadTable::FindThread(DWORD number)
-{ return number <= (DWORD)used ? storage[number] : nullptr; }
+{ 
+  return (GetThreadExt) ? GetThreadExt(number) : (number <= (DWORD)used ? storage[number] : nullptr); }
 
 static const char sse_table_eq[0x100]={
   -1,1,-1,1, -1,1,-1,1, -1,1,-1,1, -1,1,-1,1, //0, compare 1
@@ -279,6 +239,43 @@ HookManager::HookManager() :
   destroy_event = IthCreateEvent(0, 0, 0);
 }
 
+HookManager::HookManager(SetThreadCallback setThreadCallback) :
+  // jichi 9/21/2013: Zero memory
+  //CRITICAL_SECTION hmcs;
+  current(nullptr)
+  , create(nullptr)
+  , remove(nullptr)
+  , reset(nullptr)
+  , attach(nullptr)
+  , detach(nullptr)
+  , hook(nullptr)
+  , current_pid(0)
+  , thread_table(nullptr)
+  , destroy_event(nullptr)
+  , register_count(0)
+  , new_thread_number(0)
+{
+  // jichi 9/21/2013: zero memory
+  ::memset(record, 0, sizeof(record));
+  ::memset(text_pipes, 0, sizeof(text_pipes));
+  ::memset(cmd_pipes, 0, sizeof(cmd_pipes));
+  ::memset(recv_threads, 0, sizeof(recv_threads));
+
+  head.key = new ThreadParameter;
+  head.key->pid = 0;
+  head.key->hook = -1;
+  head.key->retn = -1;
+  head.key->spl = -1;
+  head.data = 0;
+  thread_table = new ThreadTable; // jichi 9/26/2013: zero memory in ThreadTable
+  RegisterSetThreadCallback(setThreadCallback);
+  TextThread* entry = new TextThread(0, -1, -1, -1, new_thread_number++);  // jichi 9/26/2013: zero memory in TextThread
+  thread_table->SetThread(0, entry);
+  SetCurrent(entry);
+  entry->Status() |= USING_UNICODE;
+  destroy_event = IthCreateEvent(0, 0, 0);
+}
+
 HookManager::~HookManager()
 {
   //LARGE_INTEGER timeout={-1000*1000,-1};
@@ -301,8 +298,8 @@ TextThread *HookManager::FindSingle(DWORD pid, DWORD hook, DWORD retn, DWORD spl
   return node ? thread_table->FindThread(node->data) : nullptr;
 }
 
-TextThread *HookManager::FindSingle(DWORD number)
-{ return (number & 0x80008000) ? nullptr : thread_table->FindThread(number); }
+TextThread* HookManager::FindSingle(DWORD number)
+{  return (number & 0x80008000) ? nullptr : thread_table->FindThread(number);}
 
 void HookManager::DetachProcess(DWORD pid) {}
 

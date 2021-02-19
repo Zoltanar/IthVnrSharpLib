@@ -93,9 +93,11 @@ namespace IthVnrSharpLib
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
-			if (VnrProxy.Host_Open(out errorMessage))
+			var threadTable = new ThreadTableWrapper();
+			VNR.SetThreadCallback threadTableSetThread = threadTable.SetThread;
+			if (VnrProxy.Host_Open(threadTableSetThread, out errorMessage))
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, threadTable);
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(HookManager, VnrProxy);
 			}

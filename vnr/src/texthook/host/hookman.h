@@ -33,18 +33,22 @@ class ThreadTable : public MyVector<TextThread *, 0x40>
 public:
   virtual void SetThread(DWORD number, TextThread *ptr);
   virtual TextThread *FindThread(DWORD number);
+
+  GetThreadCallback GetThreadExt;
+  SetThreadCallback SetThreadExt;
 };
 
 struct IHFSERVICE TCmp { char operator()(const ThreadParameter *t1, const ThreadParameter *t2); };
 struct IHFSERVICE TCpy { void operator()(ThreadParameter *t1, const ThreadParameter *t2); };
 struct IHFSERVICE TLen { int operator()(const ThreadParameter *t); };
 
-typedef DWORD (*ProcessEventCallback)(DWORD pid);
+typedef DWORD(*ProcessEventCallback)(DWORD pid);
 
 class IHFSERVICE HookManager : public AVLTree<ThreadParameter, DWORD, TCmp, TCpy, TLen>
 {
 public:
   HookManager();
+  HookManager(SetThreadCallback setThreadCallback);
   ~HookManager();
   // jichi 12/26/2013: remove virtual modifiers
   TextThread *FindSingle(DWORD pid, DWORD hook, DWORD retn, DWORD split);
@@ -105,6 +109,17 @@ public:
 
   ProcessEventCallback RegisterProcessNewHookCallback(ProcessEventCallback cf)
   { return (ProcessEventCallback)_InterlockedExchange((long*)&hook,(long)cf); }
+
+
+  SetThreadCallback RegisterSetThreadCallback(SetThreadCallback cf)
+  {
+    return (SetThreadCallback)_InterlockedExchange((long*)&(Table()->SetThreadExt), (long)cf);
+  }
+
+  GetThreadCallback RegisterGetThreadCallback(GetThreadCallback cf)
+  {
+    return (GetThreadCallback)_InterlockedExchange((long*)&(Table()->GetThreadExt), (long)cf);
+  }
 
   ProcessEventCallback ProcessNewHook() { return hook; }
   TextThread *GetCurrentThread() { return current; } // private

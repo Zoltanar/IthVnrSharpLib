@@ -1,27 +1,45 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace IthVnrSharpLib
 {
-	public class ThreadTableWrapper
+	public class ThreadTableWrapper : MarshalByRefObject, IDisposable
 	{
-		private readonly HookManagerWrapper _hookManager;
-		private readonly IntPtr _threadTable;
+		private HookManagerWrapper _hookManager;
+		private readonly Dictionary<uint, IntPtr> _textThreadMap = new();
 
-		public ThreadTableWrapper(HookManagerWrapper hookManager, IntPtr threadTablePointer)
+		public ConcurrentDictionary<IntPtr, TextThread> Map { get; } = new ();
+
+		public void Initialize(HookManagerWrapper hookManager, IntPtr threadTablePointer)
 		{
 			_hookManager = hookManager;
-			_threadTable = threadTablePointer;
 		}
 
-		public IntPtr FindThread(uint number) => _hookManager.VnrProxy.ThreadTable_FindTextThread(_threadTable, number);
+		public IntPtr FindThread(uint number)
+		{
+			if (_textThreadMap.TryGetValue(number, out var threadPointer) && Map.TryGetValue(threadPointer, out var thread)) return thread.Id;
+			return IntPtr.Zero;
+		}
 		
-		/*
-		 class ThreadTable : public MyVector<TextThread *, 0x40>
-{
-public:
-  virtual void SetThread(DWORD number, TextThread *ptr);
-  virtual TextThread *FindThread(DWORD number);
-};
-		 */
+		public void SetThread(uint num, IntPtr textThreadPointer)
+		{
+			if(_textThreadMap.ContainsKey(num)) { }
+
+			if (!Map.TryGetValue(textThreadPointer, out _))
+			{
+				var thread = new TextThread(){ Id = textThreadPointer};
+				_hookManager?.InitThread(thread);
+				Map[textThreadPointer] = thread;
+			}
+			_textThreadMap[num] = textThreadPointer;
+		}
+
+		public void Dispose()
+		{
+			_hookManager?.Dispose();
+			_textThreadMap.Clear();
+			Map.Clear();
+		}
 	}
 }

@@ -23,6 +23,7 @@ namespace IthVnrSharpLib
 		private VNR.ProcessEventCallback _removeProcessList;
 		private VNR.ThreadEventCallback _threadRemove;
 		private VNR.ThreadEventCallback _threadReset;
+		private VNR.GetThreadCallback _threadTableGetThread;
 		// ReSharper restore PrivateFieldCanBeConvertedToLocalVariable
 		
 		private readonly IthVnrViewModel _viewModel;
@@ -32,7 +33,7 @@ namespace IthVnrSharpLib
 
 		private bool _mergeByHookCode;
 		public readonly ConsoleThread ConsoleThread;
-		public ConcurrentDictionary<IntPtr, TextThread> Threads { get; } = new();
+		public ConcurrentDictionary<IntPtr, TextThread> Threads => _threadTable.Map;
 		public ConcurrentDictionary<int, ProcessInfo> Processes { get; } = new();
 		public bool Paused { get; set; }
 		public bool ShowLatestThread { get; set; }
@@ -100,7 +101,7 @@ namespace IthVnrSharpLib
 			ResetDisplayCollection();
 		}
 
-		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy)
+		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, VNR vnrProxy, ThreadTableWrapper threadTable)
 		{
 			VnrProxy = vnrProxy;
 			TextThread.UpdateDisplay = updateDisplayText;
@@ -115,13 +116,17 @@ namespace IthVnrSharpLib
 			_removeProcessList = RemoveProcessList;
 			_threadRemove = ThreadRemove;
 			_threadReset = ThreadReset;
+			_threadTable = threadTable;
 			//end of callback section
 			Host_GetHookManager(ref HookManager);
-			_threadTable = new ThreadTableWrapper(this, VnrProxy.HookManager_GetThreadTable(HookManager));
+			var threadTablePointer = VnrProxy.HookManager_GetThreadTable(HookManager);
+			_threadTable.Initialize(this, threadTablePointer);
+			_threadTableGetThread = _threadTable.FindThread;
+			VnrProxy.ThreadTable_RegisterGetThread(HookManager, _threadTableGetThread);
 			HookManager_RegisterThreadCreateCallback(_threadCreate);
 			HookManager_RegisterThreadRemoveCallback(_threadRemove);
 			HookManager_RegisterThreadResetCallback(_threadReset);
-			IntPtr console = _threadTable.FindThread(0);
+			var console = _threadTable.FindThread(0);
 			ConsoleThread = new ConsoleThread { Id = console };
 			Threads[console] = ConsoleThread;
 			_viewModel.AddNewThreadToDisplayCollection(ConsoleThread);
@@ -215,11 +220,11 @@ namespace IthVnrSharpLib
 			GetOrCreateThread(threadPointer, out var thread);
 			TextThread_RegisterOutputCallBack(threadPointer, _threadOutput, IntPtr.Zero);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
-			InitialiseThread(thread);
+			SetOptionsToNewThread(thread);
 			return 0;
 		}
 
-		private void InitialiseThread(TextThread thread)
+		private void SetOptionsToNewThread(TextThread thread)
 		{
 			var savedThread =
 				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull,thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
@@ -252,7 +257,7 @@ namespace IthVnrSharpLib
 			ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
 		}
 		
-		private void InitThread(TextThread thread)
+		public void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
 			var pr = VnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
@@ -306,7 +311,6 @@ namespace IthVnrSharpLib
 			if (!ShowLatestThread && (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay)) return len;
 			if (newLine)
 			{
-				//thread.CloseByteSection(this, null);
 				return len;
 			}
 			if (thread.IsPosting || thread.IsDisplay)
@@ -344,6 +348,7 @@ namespace IthVnrSharpLib
 			_removeProcessList = null;
 			_threadRemove = null;
 			_threadReset = null;
+			_threadTableGetThread = null;
 		}
 
 		public void AddLink(uint fromThreadNumber, uint toThreadNumber)

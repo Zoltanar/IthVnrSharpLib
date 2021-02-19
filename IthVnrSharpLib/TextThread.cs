@@ -141,7 +141,7 @@ namespace IthVnrSharpLib
 			_monitorThread = new Thread(StartMonitor) { IsBackground = true };
 			_monitorThread.Start();
 		}
-
+		
 		public void SetUnicodeStatus(IntPtr processRecord, uint hook)
 		{
 			//VnrProxy.SetTextThreadUnicodeStatus(Id, processRecord, hook);

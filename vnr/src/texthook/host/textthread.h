@@ -36,6 +36,8 @@ typedef void (* ConsoleCallback)(LPCSTR text);
 typedef void (* ConsoleWCallback)(LPCWSTR text);
 typedef DWORD (* ThreadOutputFilterCallback)(TextThread *, BYTE *, DWORD, DWORD, PVOID, bool space); // jichi 10/27/2013: Add space
 typedef DWORD (* ThreadEventCallback)(TextThread *);
+typedef void (*SetThreadCallback)(DWORD num, TextThread* ptr);
+typedef TextThread* (*GetThreadCallback)(DWORD num);
 
 //extern DWORD split_time,repeat_count,global_filter,cyclic_remove;
 

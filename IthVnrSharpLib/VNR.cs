@@ -19,7 +19,7 @@ namespace IthVnrSharpLib
 		public const string VnrDll = "vnrhost.dll";
 
 		public override object InitializeLifetimeService() => null;
-
+		
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate int ThreadEventCallback(IntPtr thread);
 
@@ -32,6 +32,12 @@ namespace IthVnrSharpLib
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate int ThreadOutputFilterCallback(IntPtr thread, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] value, int len, bool newLine, IntPtr data, bool space);
 
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		public delegate void SetThreadCallback(uint num, IntPtr textThreadPointer);
+
+		// ReSharper disable once InconsistentNaming
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		public delegate IntPtr GetThreadCallback(uint num);
 
 		// ReSharper disable once CollectionNeverQueried.Local
 		private readonly List<Delegate> _antiGcList = new();
@@ -48,8 +54,9 @@ namespace IthVnrSharpLib
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
-		public bool Host_Open(out string errorMessage)
+		public bool Host_Open(SetThreadCallback setThreadCallback, out string errorMessage)
 		{
+			_antiGcList.Add(setThreadCallback);
 			errorMessage = null;
 			var hServerMutex = IthCreateMutex(ITH_SERVER_MUTEX, true, out var present);
 			hServerMutex.Dispose();
@@ -58,7 +65,7 @@ namespace IthVnrSharpLib
 				errorMessage = "VNR is already running in a different process, try closing it and trying again.";
 				return false;
 			}
-			return Inner.Host.Host_Open();
+			return Inner.Host.Host_Open2(setThreadCallback);
 		}
 
 		private SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
@@ -131,10 +138,10 @@ namespace IthVnrSharpLib
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
 				public static extern bool Host_HijackProcess(uint pid);
-
+				
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_Open();
+				public static extern bool Host_Open2(SetThreadCallback setThreadCallback);
 
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
@@ -203,6 +210,9 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll, CallingConvention = CallingConvention.StdCall)]
 				public static extern void HookManager_AddConsoleOutput(IntPtr hookManager, [MarshalAs(UnmanagedType.LPWStr)] string text);
+				
+				[DllImport(VnrDll)]
+				public static extern IntPtr HookManager_RegisterGetThreadCallback(IntPtr threadTable, GetThreadCallback data);
 			}
 
 			internal static class TextThread
@@ -241,7 +251,7 @@ namespace IthVnrSharpLib
 
 			internal static class ThreadTable
 			{
-				[DllImport(VNR.VnrDll)]
+				[DllImport(VnrDll)]
 				public static extern IntPtr ThreadTable_FindTextThread(IntPtr threadTable, uint number);
 			}
 			
@@ -352,6 +362,12 @@ namespace IthVnrSharpLib
 			if (!success) Debug.WriteLine($"Timed out during {nameof(Host_IthCloseSystemService)}");
 			_antiGcList.Clear();
 			_antiGcDict.Clear();
+		}
+		
+		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
+		{
+			_antiGcList.Add(callback);
+			Inner.HookManager.HookManager_RegisterGetThreadCallback(hookManagerPointer, callback);
 		}
 	}
 }

@@ -223,6 +223,31 @@ extern "C" IHFSERVICE BOOL IHFAPI Host_Open()
 	return result;
 }
 
+
+extern "C" IHFSERVICE BOOL IHFAPI Host_Open2(SetThreadCallback setThreadCallback)
+{
+	BOOL result = false;
+	EnterCriticalSection(&::cs);
+	DWORD present;
+	hServerMutex = IthCreateMutex(ITH_SERVER_MUTEX, 1, &present);
+	if (present)
+		//MessageBox(0,L"Already running.",0,0);
+		// jichi 8/24/2013
+		GROWL_WARN(L"I am sorry that this game is attached by some other VNR ><\nPlease restart the game and try again!");
+	else if (!::running) {
+		::running = true;
+		::settings = new Settings;
+		::man = new HookManager(setThreadCallback);
+		//cmdq = new CommandQueue;
+		InitializeCriticalSection(&detach_cs);
+
+		::hHookMutex = IthCreateMutex(ITH_SERVER_HOOK_MUTEX, FALSE);
+		result = true;
+	}
+	LeaveCriticalSection(&::cs);
+	return result;
+}
+
 IHFSERVICE DWORD IHFAPI Host_Start()
 {
 	//IthBreak();
@@ -641,6 +666,7 @@ extern "C" IHFSERVICE VOID IHFAPI HookManager_AddConsoleOutput(HookManager* ptr,
 extern "C" IHFSERVICE ThreadTable* IHFAPI HookManager_GetThreadTable(HookManager * ptr) { return ptr->Table(); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_FindSingle(HookManager * ptr, DWORD number) { ptr->FindSingle(number); }
 extern "C" IHFSERVICE TextThread* IHFAPI ThreadTable_FindTextThread(ThreadTable * ptr, DWORD number) { return ptr->FindThread(number); }
+extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterGetThreadCallback(HookManager * ptr, GetThreadCallback data) { ptr->RegisterGetThreadCallback(data); }
 extern "C" IHFSERVICE DWORD IHFAPI TextThread_GetStatus(TextThread* ptr) { return ptr->Status(); }
 extern "C" IHFSERVICE VOID IHFAPI TextThread_SetStatus(TextThread* ptr, DWORD status) { ptr->Status() = status; }
 extern "C" IHFSERVICE WORD IHFAPI TextThread_GetNumber(TextThread* ptr) { return ptr->Number(); }
