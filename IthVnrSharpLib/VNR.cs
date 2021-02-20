@@ -40,7 +40,7 @@ namespace IthVnrSharpLib
 		public delegate IntPtr GetThreadCallback(uint num);
 
 		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly List<Delegate> _antiGcList = new();
+		private readonly List<object> _antiGcList = new();
 
 		// ReSharper disable once CollectionNeverQueried.Local
 		private readonly Dictionary<IntPtr, Delegate> _antiGcDict = new();
@@ -368,6 +368,11 @@ namespace IthVnrSharpLib
 		{
 			_antiGcList.Add(callback);
 			Inner.HookManager.HookManager_RegisterGetThreadCallback(hookManagerPointer, callback);
+		}
+
+		public void SaveObject(object obj)
+		{
+			_antiGcList.Add(obj);
 		}
 	}
 }

@@ -34,6 +34,16 @@ public:
   virtual void SetThread(DWORD number, TextThread *ptr);
   virtual TextThread *FindThread(DWORD number);
 
+  SetThreadCallback RegisterSetThreadCallback(SetThreadCallback cf)
+  {
+    return (SetThreadCallback)_InterlockedExchange((long*)&(SetThreadExt), (long)cf);
+  }
+
+  GetThreadCallback RegisterGetThreadCallback(GetThreadCallback cf)
+  {
+    return (GetThreadCallback)_InterlockedExchange((long*)&(GetThreadExt), (long)cf);
+  }
+
   GetThreadCallback GetThreadExt;
   SetThreadCallback SetThreadExt;
 };

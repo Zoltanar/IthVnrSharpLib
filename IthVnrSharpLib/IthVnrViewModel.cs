@@ -23,6 +23,7 @@ namespace IthVnrSharpLib
 	[Serializable]
 	public class IthVnrViewModel : INotifyPropertyChanged
 	{
+		private VNR.SetThreadCallback _threadTableSetThread;
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
 		public Commands Commands { get; protected set; }
@@ -68,6 +69,7 @@ namespace IthVnrSharpLib
 
 		private TextOutputEvent _updateDisplayText;
 		private bool _finalized;
+		private ThreadTableWrapper _threadTable;
 
 		public IthVnrViewModel()
 		{
@@ -93,11 +95,12 @@ namespace IthVnrSharpLib
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
-			var threadTable = new ThreadTableWrapper();
-			VNR.SetThreadCallback threadTableSetThread = threadTable.SetThread;
-			if (VnrProxy.Host_Open(threadTableSetThread, out errorMessage))
+			_threadTable = new ThreadTableWrapper();
+			_threadTableSetThread = _threadTable.SetThread;
+			VnrProxy.SaveObject(_threadTable);
+			if (VnrProxy.Host_Open(_threadTableSetThread, out errorMessage))
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, threadTable);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, _threadTable);
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(HookManager, VnrProxy);
 			}
@@ -109,8 +112,7 @@ namespace IthVnrSharpLib
 			OnPropertyChanged(nameof(HookManager));
 			OnPropertyChanged(nameof(DisplayProcesses));
 		}
-
-
+		
 		public void ReInitialize(out string errorMessage)
 		{
 			Initialize(_updateDisplayText, out errorMessage);
@@ -144,7 +146,7 @@ namespace IthVnrSharpLib
 		/// <param name="textThread"></param>
 		public virtual void RemoveThreadFromDisplayCollection(TextThread textThread)
 		{
-			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.First(x => x.Tag == textThread)));
+			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.FirstOrDefault(x => x.Tag == textThread)));
 		}
 		
 public void Finalize(object sender, ExitEventArgs e)

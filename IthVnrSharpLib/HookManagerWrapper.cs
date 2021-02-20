@@ -264,6 +264,7 @@ namespace IthVnrSharpLib
 			thread.ProcessRecordPtr = pr;
 			thread.SetUnicodeStatus(pr, thread.Parameter.hook);
 			thread.SetEntryString();
+			_viewModel.AddNewThreadToDisplayCollection(thread);
 		}
 
 		private void GetOrCreateThread(IntPtr threadPointer, out TextThread thread)
@@ -301,7 +302,6 @@ namespace IthVnrSharpLib
 				InitThread(thread);
 			}
 			Threads[threadPointer] = thread;
-			_viewModel.AddNewThreadToDisplayCollection(thread);
 		}
 
 		private int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
