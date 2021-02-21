@@ -119,8 +119,7 @@ namespace IthVnrSharpLib
 			_threadTable = threadTable;
 			//end of callback section
 			Host_GetHookManager(ref HookManager);
-			var threadTablePointer = VnrProxy.HookManager_GetThreadTable(HookManager);
-			_threadTable.Initialize(this, threadTablePointer);
+			_threadTable.Initialize(this);
 			_threadTableGetThread = _threadTable.FindThread;
 			VnrProxy.ThreadTable_RegisterGetThread(HookManager, _threadTableGetThread);
 			HookManager_RegisterThreadCreateCallback(_threadCreate);
@@ -377,15 +376,28 @@ namespace IthVnrSharpLib
 			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}
 
-		public void FindThreadWithText(string searchTerm)
+		public void FindThreadWithText(string searchTerm, bool searchAllEncodings)
 		{
-			foreach (var thread in Threads.Values)
+			foreach (var thread in Threads.Values.OrderBy(t=>t.Number))
 			{
 				if (thread.IsConsole) continue;
-				var textLines = thread.Text.Split(new [] {Environment.NewLine}, StringSplitOptions.None);
-				var firstLineWith = textLines.FirstOrDefault(l => l.Contains(searchTerm));
-				if (firstLineWith != null) ConsoleOutput($"Found text in thread {thread.EntryString}: {firstLineWith}", true);
+				if (searchAllEncodings)
+				{
+					foreach (var encoding in IthVnrViewModel.Encodings)
+					{
+						var textLines = thread.GetTextForEncoding(encoding).Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+						var firstLineWith = textLines.FirstOrDefault(l => l.Contains(searchTerm));
+						if (firstLineWith != null) ConsoleOutput($"Found text in thread {thread.EntryString}: {firstLineWith}", true);
+					}
+				}
+				else
+				{
+					var textLines = thread.Text.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+					var firstLineWith = textLines.FirstOrDefault(l => l.Contains(searchTerm));
+					if (firstLineWith != null) ConsoleOutput($"Found text in thread {thread.EntryString}: {firstLineWith}", true);
+				}
 			}
+			ConsoleOutput($@"Text search complete.", true);
 		}
 	}
 

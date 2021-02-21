@@ -152,6 +152,7 @@ namespace IthVnrSharpLib
 public void Finalize(object sender, ExitEventArgs e)
 		{
 			if (Finalized) return;
+			Finalized = true;
 			var exitWatch = Stopwatch.StartNew();
 			Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Starting exit procedures...");
 			try
@@ -170,10 +171,8 @@ public void Finalize(object sender, ExitEventArgs e)
 			{
 				HookManager = null;
 				Commands = null;
-				SelectedTextThread = null;
 				SelectedProcess = null;
 				VnrProxy = null;
-				OnPropertyChanged(nameof(SelectedTextThread));
 				OnPropertyChanged(nameof(SelectedProcess));
 				Finalized = true;
 				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");
@@ -185,12 +184,7 @@ public void Finalize(object sender, ExitEventArgs e)
 		{
 			//can be overridden to save game text threads to persistant data storage
 		}
-
-		public void OutputSelectedText(string text)
-		{
-			_updateDisplayText(this, new TextOutputEventArgs(SelectedTextThread, text, "Selected Text", false));
-		}
-
+		
 		public void TogglePostOtherThreads()
 		{
 			var selected = SelectedTextThread;

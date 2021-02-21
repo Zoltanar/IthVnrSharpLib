@@ -6,12 +6,15 @@ namespace IthVnrSharpLib
 {
 	public class ThreadTableWrapper : MarshalByRefObject, IDisposable
 	{
+		public override object InitializeLifetimeService() => null;
+
 		private HookManagerWrapper _hookManager;
+
 		private readonly Dictionary<uint, IntPtr> _textThreadMap = new();
 
 		public ConcurrentDictionary<IntPtr, TextThread> Map { get; } = new ();
 
-		public void Initialize(HookManagerWrapper hookManager, IntPtr threadTablePointer)
+		public void Initialize(HookManagerWrapper hookManager)
 		{
 			_hookManager = hookManager;
 		}
@@ -28,7 +31,7 @@ namespace IthVnrSharpLib
 
 			if (!Map.TryGetValue(textThreadPointer, out _))
 			{
-				var thread = new TextThread(){ Id = textThreadPointer};
+				var thread = new TextThread { Id = textThreadPointer};
 				_hookManager?.InitThread(thread);
 				Map[textThreadPointer] = thread;
 			}

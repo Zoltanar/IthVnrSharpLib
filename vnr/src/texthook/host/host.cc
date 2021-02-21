@@ -467,6 +467,11 @@ extern "C" IHFSERVICE bool IHFAPI Host_HijackProcess(DWORD pid)
 	return hCmd && sendCommand(hCmd, HOST_COMMAND_HIJACK_PROCESS);
 }
 
+extern "C" IHFSERVICE HANDLE IHFAPI HookManager_GetCmdHandleByPID(HookManager * hookman, DWORD pid)
+{
+	return hookman->GetCmdHandleByPID(pid);
+}
+
 extern "C" IHFSERVICE DWORD IHFAPI Host_InsertHook(DWORD pid, HookParam *hp, LPCSTR name)
 {
 	ITH_SYNC_HOOK;
@@ -663,7 +668,6 @@ extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessNewHookCallback(Hoo
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessDetachCallback(HookManager* ptr, ProcessEventCallback data) { ptr->RegisterProcessDetachCallback(data); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterProcessAttachCallback(HookManager* ptr, ProcessEventCallback data) { ptr->RegisterProcessAttachCallback(data); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_AddConsoleOutput(HookManager* ptr, LPCWSTR text) { ptr->AddConsoleOutput(text); }
-extern "C" IHFSERVICE ThreadTable* IHFAPI HookManager_GetThreadTable(HookManager * ptr) { return ptr->Table(); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_FindSingle(HookManager * ptr, DWORD number) { ptr->FindSingle(number); }
 extern "C" IHFSERVICE TextThread* IHFAPI ThreadTable_FindTextThread(ThreadTable * ptr, DWORD number) { return ptr->FindThread(number); }
 extern "C" IHFSERVICE VOID IHFAPI HookManager_RegisterGetThreadCallback(HookManager * ptr, GetThreadCallback data) { ptr->Table()->RegisterGetThreadCallback(data); }

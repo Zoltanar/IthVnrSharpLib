@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace IthVnrSharpLib
 {
@@ -17,7 +16,8 @@ namespace IthVnrSharpLib
 		private Regex LinkRegex { get; } = new (":l(.+)", RegexOptions.IgnoreCase);
 		private Regex UnlinkRegex { get; } = new (":u(.+)", RegexOptions.IgnoreCase);
 		private Regex HelpRegex { get; } = new ("(:h|:help)", RegexOptions.IgnoreCase);
-		private Regex SearchRegex { get; } = new ("(:s|:search) (.+)", RegexOptions.IgnoreCase);
+		private Regex SearchRegex { get; } = new("(:s|:search) (.+)", RegexOptions.IgnoreCase);
+		private Regex SearchAllRegex { get; } = new("(:sa|:searchall) (.+)", RegexOptions.IgnoreCase);
 
 		public Commands(HookManagerWrapper hookManager, VNR vnrProxy)
 		{
@@ -39,12 +39,16 @@ namespace IthVnrSharpLib
 			else if (LinkRegex.IsMatch(cmd)) LinkThreads(cmd);
 			else if (UnlinkRegex.IsMatch(cmd)) UnlinkThread(cmd);
 			else if (HelpRegex.IsMatch(cmd)) _hookManager.ConsoleOutput(CommandUsage, true);
-			else if ((searchMatch = SearchRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value);
+			else if ((searchMatch = SearchRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value, false);
+			else if ((searchMatch = SearchAllRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value, true);
 			else _hookManager.ConsoleOutput("Unrecognized command.", true);
 		}
 
 		public const string CommandUsage =
 @"Available commands:
+:h or :help - display this mesage.
+:s or :search [search term] - search threads for search term in their set encoding.
+:sa or :searchall [search term] - search threads for search term in all encodings (Unicode, Shift-JIS, UTF-8).
 :h or :help - display this mesage.
 
 :L[from]-[to] - link from thread [from] to thread [to],
@@ -60,7 +64,7 @@ namespace IthVnrSharpLib
     All numbers except ordinal are hexadecimal without any prefixes.
 ";
 		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly List<object> _stopGarbageCollection = new List<object>();
+		private readonly List<object> _stopGarbageCollection = new();
 
 		private void UnlinkThread(string cmd)
 		{
@@ -95,11 +99,19 @@ namespace IthVnrSharpLib
 		{
 			var hp = new HookParam();
 			_stopGarbageCollection.Add(hp);
-			if (!HookParam.Parse(cmd.Substring(2), ref hp)) return false;
+			try
+			{
+				if (!HookParam.Parse(cmd.Substring(2), ref hp)) return false;
+			}
+			catch (Exception ex)
+			{
+				_hookManager.ConsoleOutput($"Exception while parsing hook code: {ex}", true);
+				return false;
+			}
 			var hookParamPointer = (IntPtr) (&hp);
-			var insertHookTask = Task.Run(()=> _vnrProxy.Host_InsertHook(pid, hookParamPointer, null));
-			var success = insertHookTask.Wait(5000);
-			return success;
+			_hookManager.ConsoleOutput($"Parsed code to: {hp}", true);
+			var result = _vnrProxy.Host_InsertHook(pid, hookParamPointer, null, _hookManager);
+			return result == 0;
 		}
 
 		private void AttachWithProcessId(string cmd)

@@ -108,15 +108,21 @@ namespace IthVnrSharpLib
 		{
 			get
 			{
-				string curString = PrefEncoding.GetString(CurrentBytes.ArrayCopy());
-				string result;
-				lock (Bytes.SyncRoot)
-				{
-					result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(x => PrefEncoding.GetString(x)))
-							 + Environment.NewLine + curString;
-				}
+				var result = GetTextForEncoding(PrefEncoding);
 				return result;
 			}
+		}
+
+		public string GetTextForEncoding(Encoding encoding)
+		{
+			string curString = encoding.GetString(CurrentBytes.ArrayCopy());
+			string result;
+			lock (Bytes.SyncRoot)
+			{
+				result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(x => PrefEncoding.GetString(x)))
+				         + Environment.NewLine + curString;
+			}
+			return result;
 		}
 
 		public TextThread LinkTo { get; set; }

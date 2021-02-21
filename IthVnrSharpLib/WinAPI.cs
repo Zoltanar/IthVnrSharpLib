@@ -6,10 +6,11 @@ using System.Text;
 // ReSharper disable UnusedMember.Global
 // ReSharper disable FieldCanBeMadeReadOnly.Global
 // ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable IdentifierTypo
 
 namespace IthVnrSharpLib
 {
-public static class WinAPI
+	public static class WinAPI
 	{
 		// privileges
 		private const int PROCESS_CREATE_THREAD = 0x0002;
@@ -50,13 +51,13 @@ public static class WinAPI
 		public static extern bool CloseHandle(IntPtr hHandle);
 
 		[DllImport("kernel32.dll", SetLastError = true)]
-		public static extern uint WaitForSingleObject(IntPtr hHandle, UInt32 dwMilliseconds);
+		public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
 
 		[DllImport("ntdll.dll", ExactSpelling = true, SetLastError = false)]
 		private static extern int NtClose(IntPtr hObject);
-		
+
 		[DllImport("psapi.dll")]
-		public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In] [MarshalAs(UnmanagedType.U4)] int nSize);
+		public static extern uint GetModuleFileNameEx(IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In][MarshalAs(UnmanagedType.U4)] int nSize);
 
 		[DllImport("kernel32.dll")]
 		public static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, uint dwLength);
@@ -66,6 +67,19 @@ public static class WinAPI
 
 		[DllImport("ntdll.dll", SetLastError = true)]
 		public static extern bool NtReleaseMutant(IntPtr mutantHandle, [Out] IntPtr previousCount);
+
+		[DllImport("ntdll.dll", SetLastError = true)]
+		public static extern uint NtWriteFile(
+			IntPtr fileHandle,
+			IntPtr @event,
+			IntPtr apcRoutine,
+			IntPtr appContext,
+			out IntPtr IoStatusBlock,
+			IntPtr buffer,
+			uint Length,
+			IntPtr byteOffset,
+			IntPtr key
+		);
 
 		[Flags]
 		public enum AllocationType : uint

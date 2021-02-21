@@ -19,7 +19,7 @@ namespace IthVnrSharpLib
 		public const string VnrDll = "vnrhost.dll";
 
 		public override object InitializeLifetimeService() => null;
-		
+
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate int ThreadEventCallback(IntPtr thread);
 
@@ -48,8 +48,8 @@ namespace IthVnrSharpLib
 		// ReSharper disable InconsistentNaming
 		private const string ITH_CLIENT_MUTEX = "VNR_CLIENT";   // ITH_DLL_RUNNING
 		private const string ITH_SERVER_MUTEX = "VNR_SERVER";   // ITH_RUNNING
-		private const string ITH_SERVER_HOOK_MUTEX = "VNR_SERVER_HOOK";   // original
-																																			// ReSharper restore InconsistentNaming
+		internal static Mutex ITH_SERVER_HOOK_MUTEX = new(false, "VNR_SERVER_HOOK");
+		// ReSharper restore InconsistentNaming
 		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, -1);
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
@@ -68,7 +68,7 @@ namespace IthVnrSharpLib
 			return Inner.Host.Host_Open2(setThreadCallback);
 		}
 
-		private SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
+		internal static SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
 		{
 			var ret = new Mutex(initialOwner, name, out var createdNew);
 			exist = !createdNew || ret.SafeWaitHandle.DangerousGetHandle() == InvalidHandleValue;
@@ -81,11 +81,11 @@ namespace IthVnrSharpLib
 		public bool Host_IthCloseSystemService() => Inner.Host.Host_IthCloseSystemService();
 		public bool Host_Start() => Inner.Host.Host_Start();
 		public int Host_GetHookManager(ref IntPtr hookManagerPointer) => Inner.Host.Host_GetHookManager(ref hookManagerPointer);
+		public int Host_InsertHook(int pid, IntPtr hookParam, string name, HookManagerWrapper hookManager) => Inner.Host.Host_InsertHook(pid, hookParam, name,hookManager.HookManager);
 		public int Host_InsertHook(int pid, IntPtr hookParam, string name) => Inner.Host.Host_InsertHook(pid, hookParam, name);
 		#endregion
 
 		#region HookManager
-		public IntPtr HookManager_GetThreadTable(IntPtr hookManagerPointer) => Inner.HookManager.HookManager_GetThreadTable(hookManagerPointer);
 		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
 		public void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
@@ -126,19 +126,18 @@ namespace IthVnrSharpLib
 			Inner.TextThread.TextThread_RegisterOutputCallBack(textThread, callback, data);
 		}
 		#endregion
-
-		#region ThreadTable
-		public IntPtr ThreadTable_FindTextThread(IntPtr threadTable, uint number) => Inner.ThreadTable.ThreadTable_FindTextThread(threadTable, number);
-		#endregion
 		
 		private static class Inner
 		{
 			internal static class Host
 			{
+				// ReSharper disable once InconsistentNaming
+				private const int IHS_SIZE = 0x80;
+
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
 				public static extern bool Host_HijackProcess(uint pid);
-				
+
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
 				public static extern bool Host_Open2(SetThreadCallback setThreadCallback);
@@ -168,6 +167,62 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				public static extern int Host_InsertHook(int pid, IntPtr hookParam, string name);
+				
+				public static unsafe int Host_InsertHook(int pid, IntPtr hookParam, string name, IntPtr hookManager)
+					{
+						//ITH_SERVER_HOOK_MUTEX.WaitOne();
+						try
+						{
+							var hCmd = HookManager.HookManager_GetCmdHandleByPID(hookManager, pid);
+							if (hCmd == IntPtr.Zero) return -1;
+							var hookParamName = name?.Substring(0, Math.Min(name.Length, IHS_SIZE));
+							var s = new InsertHookStruct
+							{
+								sp = 
+								{
+									type = (uint) HostCommandType.HOST_COMMAND_NEW_HOOK, 
+									hp = Marshal.PtrToStructure<HookParam>(hookParam)
+								},
+								name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
+							};
+							WinAPI.NtWriteFile(hCmd, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr) (&s), IHS_SIZE,
+								IntPtr.Zero, IntPtr.Zero);
+						}
+						catch (Exception ex)
+						{
+							StaticHelpers.LogToFile(ex);
+							return -1;
+						}
+						finally
+						{
+							//ITH_SERVER_HOOK_MUTEX.ReleaseMutex();
+						}
+						return 0;
+					}
+				
+					[StructLayout(LayoutKind.Sequential)]
+					private struct InsertHookStruct
+					{
+						public SendParam sp;
+						public IntPtr name_buffer;
+					}
+
+					[StructLayout(LayoutKind.Sequential)]
+					private struct SendParam
+					{
+						public uint type;
+						public HookParam hp;
+					};
+					
+					private enum HostCommandType
+					{
+						HOST_COMMAND = -1 // null type
+						, HOST_COMMAND_NEW_HOOK = 0
+						, HOST_COMMAND_REMOVE_HOOK = 1
+						, HOST_COMMAND_MODIFY_HOOK = 2
+						, HOST_COMMAND_HIJACK_PROCESS = 3
+						, HOST_COMMAND_DETACH = 4
+					}
 
 				[DllImport(VnrDll)]
 				public static extern int Host_GetHookManager(ref IntPtr hookManagerPointer);
@@ -178,9 +233,6 @@ namespace IthVnrSharpLib
 
 			internal static class HookManager
 			{
-				[DllImport(VnrDll)]
-				public static extern IntPtr HookManager_GetThreadTable(IntPtr hookManager);
-
 				[DllImport(VnrDll)]
 				public static extern uint HookManager_RegisterThreadCreateCallback(IntPtr hookManagerPointer, ThreadEventCallback cb);
 
@@ -210,9 +262,12 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll, CallingConvention = CallingConvention.StdCall)]
 				public static extern void HookManager_AddConsoleOutput(IntPtr hookManager, [MarshalAs(UnmanagedType.LPWStr)] string text);
-				
+
 				[DllImport(VnrDll)]
 				public static extern IntPtr HookManager_RegisterGetThreadCallback(IntPtr threadTable, GetThreadCallback data);
+
+				[DllImport(VnrDll)]
+				public static extern IntPtr HookManager_GetCmdHandleByPID(IntPtr hookManagerPointer, int pid);
 			}
 
 			internal static class TextThread
@@ -247,12 +302,6 @@ namespace IthVnrSharpLib
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.LPStr)]
 				public static extern string TextThread_GetThreadString(IntPtr textThread);
-			}
-
-			internal static class ThreadTable
-			{
-				[DllImport(VnrDll)]
-				public static extern IntPtr ThreadTable_FindTextThread(IntPtr threadTable, uint number);
 			}
 			
 			[DllImport(VnrDll)]
@@ -356,14 +405,14 @@ namespace IthVnrSharpLib
 			const int timeout = 5000;
 			var closeTask = Task.Run(Host_Close);
 			var success = closeTask.Wait(timeout);
-			if(!success) Debug.WriteLine($"Timed out during {nameof(Host_Close)}");
+			if (!success) Debug.WriteLine($"Timed out during {nameof(Host_Close)}");
 			var closeSystem = Task.Run(Host_IthCloseSystemService);
 			success = closeSystem.Wait(timeout);
 			if (!success) Debug.WriteLine($"Timed out during {nameof(Host_IthCloseSystemService)}");
 			_antiGcList.Clear();
 			_antiGcDict.Clear();
 		}
-		
+
 		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
 		{
 			_antiGcList.Add(callback);

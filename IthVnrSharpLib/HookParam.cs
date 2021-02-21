@@ -12,10 +12,10 @@ namespace IthVnrSharpLib
 	[StructLayout(LayoutKind.Sequential, Size = 60)]
 	public unsafe struct HookParam
 	{
-		// jichi 8/24/2013: For special hooks.
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		// ReSharper disable once InconsistentNaming
 		// ReSharper disable once UnusedMember.Global
+		// jichi 8/24/2013: For special hooks.
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate void* text_fun_t(uint esp, HookParam* hp, byte index, uint* data, uint* split, uint* len);
 
 		// jichi 10/24/2014: Add filter function. Return the if skip the text
@@ -64,10 +64,7 @@ namespace IthVnrSharpLib
 				var m = m1[0].Groups;
 				var start = cmd.Substring(m[0].Value.Length);
 				if (m[2].Success) hp.type |= (uint)HookParamType.NO_CONTEXT;
-				if (m[1].Value.Length == 0)
-				{
-					hp.type |= (uint)HookParamType.STRING_LAST_CHAR;
-				}
+				if (m[1].Value.Length == 0) hp.type |= (uint)HookParamType.STRING_LAST_CHAR;
 				else
 				{
 					switch (char.ToUpperInvariant(m[1].Value[0]))
@@ -111,19 +108,17 @@ namespace IthVnrSharpLib
 				{
 					m = m1[0].Groups;
 					start = start.Substring(m[0].Value.Length);
-					if (m[1].Value.StartsWith("-")) hp.offset = (uint)-uint.Parse(m[1].Value.Substring(1), NumberStyles.HexNumber);
-					else hp.offset = uint.Parse(m[1].Value, NumberStyles.HexNumber);
+					hp.offset = GetUIntFromHexValue(m[1].Value);
 					if (m[2].Success)
 					{
 						hp.type |= (uint)HookParamType.DATA_INDIRECT;
 						hp.index = uint.Parse(m[2].Value.Substring(1), NumberStyles.HexNumber);
 					}
 				}
-
 				// [:sub_offset[*drso]]
 				const string sub_offset = "(-?[A-Fa-f0-9]+)";
 				const string drso = "(\\*-?[A-Fa-f0-9]+)?";
-				rx = new Regex($"^{sub_offset}{drso}", RegexOptions.IgnoreCase);
+				rx = new Regex($"^:{sub_offset}{drso}", RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
 				result = m1.Count != 0;
 				if (result)
@@ -131,11 +126,11 @@ namespace IthVnrSharpLib
 					m = m1[0].Groups;
 					start = start.Substring(m[0].Value.Length);
 					hp.type |= (uint)HookParamType.USING_SPLIT;
-					hp.split = uint.Parse(m[1].Value, NumberStyles.HexNumber);
+					hp.split = GetUIntFromHexValue(m[1].Value);
 					if (m[2].Success)
 					{
 						hp.type |= (uint)HookParamType.SPLIT_INDIRECT;
-						hp.split_index = uint.Parse(m[2].Value.Substring(1), NumberStyles.HexNumber);
+						hp.split_index = GetUIntFromHexValue(m[2].Value.Substring(1));
 					}
 				}
 				// @addr
@@ -145,7 +140,7 @@ namespace IthVnrSharpLib
 				if (!result) return false;
 				m = m1[0].Groups;
 				start = start.Substring(m[0].Value.Length);
-				hp.address = uint.Parse(m[0].Value.Substring(1), NumberStyles.HexNumber);
+				hp.address = GetUIntFromHexValue(m[0].Value.Substring(1));
 				if ((hp.offset & 0x80000000) != 0)
 					hp.offset -= 4;
 				if ((hp.split & 0x80000000) != 0)
@@ -157,8 +152,8 @@ namespace IthVnrSharpLib
 				// ":GDI.dll"        -> MODULE_OFFSET && module != NULL
 				// ":GDI.dll:strlen" -> MODULE_OFFSET | FUNCTION_OFFSET && module != NULL && function != NULL
 				// ":GDI.dll:#123"   -> MODULE_OFFSET | FUNCTION_OFFSET && module != NULL && function != NULL
-				string module = @"([\x21-\x7E]+)";
-				string name = @"[\x21-\x7E]+";
+				string module = @"([^:;]+)";
+				string name = @"[^:;]+";
 				string ordinal = "\\d+";
 				rx = new Regex($"^:({module}(:{name}|#{ordinal})?)?$", RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
@@ -170,7 +165,7 @@ namespace IthVnrSharpLib
 					{
 						hp.type |= (uint)HookParamType.MODULE_OFFSET;
 						module = m[2].Value;
-						module = module.ToLowerInvariant();//std::transform(module.begin(), module.end(), module.begin(), ::towlower);
+						module = module.ToLowerInvariant();
 						hp.module = Hash(module);
 						if (m[3].Success) // :name|#ordinal
 						{
@@ -188,11 +183,11 @@ namespace IthVnrSharpLib
 					{
 						m = m1[0].Groups;
 						hp.type |= (uint)HookParamType.MODULE_OFFSET;
-						hp.module = uint.Parse(m[1].Value, NumberStyles.HexNumber);
+						hp.module = GetUIntFromHexValue(m[1].Value);
 						if (m[2].Success)
 						{
 							hp.type |= (uint)HookParamType.FUNCTION_OFFSET;
-							hp.function = uint.Parse(m[2].Value.Substring(1), NumberStyles.HexNumber);
+							hp.function = GetUIntFromHexValue(m[2].Value.Substring(1));
 						}
 					}
 					else
@@ -204,6 +199,15 @@ namespace IthVnrSharpLib
 					}
 				}
 				return true;
+			}
+		}
+
+		private static uint GetUIntFromHexValue(string text)
+		{
+			unchecked
+			{
+				if (text.StartsWith("-")) return (uint)-uint.Parse(text.Substring(1), NumberStyles.HexNumber);
+				return uint.Parse(text, NumberStyles.HexNumber);
 			}
 		}
 
@@ -222,5 +226,8 @@ namespace IthVnrSharpLib
 		{
 			return (value >> count) | (value << (32 - count));
 		}
+
+		public override string ToString() => 
+			$"addr: {address}, text_fun: {text_fun}, function: {function}, hook_len: {hook_len}, ind: {index}, length_offset: {length_offset}, module: {module}, off: {offset}, recover_len: {recover_len}, split: {split}, split_ind: {split_index}, type: {type}";
 	};
 }
