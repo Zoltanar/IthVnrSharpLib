@@ -107,5 +107,13 @@ namespace IthVnrSharpLib
 			public uint Protect;
 			public uint Type;
 		}
+
+		public enum WaitReturnCode : long
+		{
+			WAIT_ABANDONED = 0x00000080L,
+			WAIT_OBJECT_0 = 0x00000000L,
+			WAIT_TIMEOUT = 0x00000102L,
+			WAIT_FAILED = 0xFFFFFFFF
+		}
 	}
 }

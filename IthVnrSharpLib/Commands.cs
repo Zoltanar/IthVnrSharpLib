@@ -125,12 +125,11 @@ namespace IthVnrSharpLib
 				_hookManager.ConsoleOutput($"Failed to parse '{cmd.Substring(3)}'.", true);
 				return;
 			}
-
 			try
 			{
 				var process = System.Diagnostics.Process.GetProcessById(processId);
-				_vnrProxy.Host_InjectByPID((uint)process.Id);
-				_hookManager.ConsoleOutput($"Injected into {process.ProcessName} ({process.Id})", true);
+				var success = _vnrProxy.Host_InjectByPID((uint)process.Id,out var errorMessage);
+				_hookManager.ConsoleOutput(success ? $"Injected into {process.ProcessName} ({process.Id})" : errorMessage, true);
 			}
 			catch (Exception ex)
 			{
@@ -148,8 +147,8 @@ namespace IthVnrSharpLib
 					_hookManager.ConsoleOutput($"No processes found with name '{processName}'", true);
 					return;
 				case 1:
-					_vnrProxy.Host_InjectByPID((uint)processes[0].Id);
-					_hookManager.ConsoleOutput($"Injected into {processes[0].ProcessName} ({processes[0].Id}", true);
+					var success = _vnrProxy.Host_InjectByPID((uint)processes[0].Id, out var errorMessage);
+					_hookManager.ConsoleOutput(success ? $"Injected into {processes[0].ProcessName} ({processes[0].Id})" : errorMessage, true);
 					return;
 				default:
 					_hookManager.ConsoleOutput($"Multiple processes found with name '{processName}', use PID:", true);

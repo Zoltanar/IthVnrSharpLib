@@ -56,8 +56,7 @@ namespace IthVnrSharpLib
 
 		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, 1);
 
-		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
-		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
+		public bool Host_InjectByPID(uint pid, out string errorMessage) => Injector.InjectIntoProcess(pid, out errorMessage);
 		public bool Host_Open(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
 		{
 			_antiGcList.Add(setThreadCallback);
@@ -131,8 +130,8 @@ namespace IthVnrSharpLib
 			Inner.TextThread.TextThread_RegisterOutputCallBack(textThread, callback, data);
 		}
 		#endregion
-		
-		private static class Inner
+
+		internal static class Inner
 		{
 			internal static class Host
 			{
@@ -169,61 +168,65 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				public static extern uint Host_AddLink(uint from, uint to);
-				
+
 				public static unsafe int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle)
+				{
+					try
 					{
-						try
+						var hookParamName = name?.Substring(0, Math.Min(name.Length, IHS_SIZE));
+						var s = new InsertHookStruct
 						{
-							var hookParamName = name?.Substring(0, Math.Min(name.Length, IHS_SIZE));
-							var s = new InsertHookStruct
-							{
-								sp = 
+							sp =
 								{
-									type = (uint) HostCommandType.HOST_COMMAND_NEW_HOOK, 
+									type = (uint) HostCommandType.HOST_COMMAND_NEW_HOOK,
 									hp = Marshal.PtrToStructure<HookParam>(hookParam)
 								},
-								name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
-							};
-							WinAPI.NtWriteFile(commandHandle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr) (&s), IHS_SIZE,
-								IntPtr.Zero, IntPtr.Zero);
-						}
-						catch (Exception ex)
-						{
-							StaticHelpers.LogToFile(ex);
-							return -1;
-						}
-						return 0;
+							name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
+						};
+						WinAPI.NtWriteFile(commandHandle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr)(&s), IHS_SIZE,
+							IntPtr.Zero, IntPtr.Zero);
 					}
-				
-					[StructLayout(LayoutKind.Sequential)]
-					private struct InsertHookStruct
+					catch (Exception ex)
 					{
-						public SendParam sp;
-						public IntPtr name_buffer;
+						StaticHelpers.LogToFile(ex);
+						return -1;
 					}
+					return 0;
+				}
 
-					[StructLayout(LayoutKind.Sequential)]
-					private struct SendParam
-					{
-						public uint type;
-						public HookParam hp;
-					};
-					
-					private enum HostCommandType
-					{
-						HOST_COMMAND = -1 // null type
-						, HOST_COMMAND_NEW_HOOK = 0
-						, HOST_COMMAND_REMOVE_HOOK = 1
-						, HOST_COMMAND_MODIFY_HOOK = 2
-						, HOST_COMMAND_HIJACK_PROCESS = 3
-						, HOST_COMMAND_DETACH = 4
-					}
+				[StructLayout(LayoutKind.Sequential)]
+				private struct InsertHookStruct
+				{
+					public SendParam sp;
+					public IntPtr name_buffer;
+				}
+
+				[StructLayout(LayoutKind.Sequential)]
+				private struct SendParam
+				{
+					public uint type;
+					public HookParam hp;
+				};
+
+				private enum HostCommandType
+				{
+					HOST_COMMAND = -1 // null type
+					, HOST_COMMAND_NEW_HOOK = 0
+					, HOST_COMMAND_REMOVE_HOOK = 1
+					, HOST_COMMAND_MODIFY_HOOK = 2
+					, HOST_COMMAND_HIJACK_PROCESS = 3
+					, HOST_COMMAND_DETACH = 4
+				}
 
 				[DllImport(VnrDll)]
 				public static extern int Host_GetHookManager(ref IntPtr hookManagerPointer);
 
 				[DllImport(VnrDll)]
 				public static extern void Host_GetHookName([MarshalAs(UnmanagedType.LPStr)] StringBuilder str, uint parameterPid, uint parameterHook, uint length);
+
+				[DllImport(VnrDll)]
+				[return: MarshalAs(UnmanagedType.Bool)]
+				public static extern bool Host_HandleCreateMutex(uint pid);
 			}
 
 			internal static class HookManager
@@ -260,7 +263,7 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				public static extern IntPtr HookManager_RegisterGetThreadCallback(IntPtr threadTable, GetThreadCallback data);
-				
+
 			}
 
 			internal static class TextThread
@@ -296,7 +299,7 @@ namespace IthVnrSharpLib
 				[return: MarshalAs(UnmanagedType.LPStr)]
 				public static extern string TextThread_GetThreadString(IntPtr textThread);
 			}
-			
+
 			[DllImport(VnrDll)]
 			public static extern int Settings_GetSplittingInterval();
 
@@ -309,14 +312,7 @@ namespace IthVnrSharpLib
 			[DllImport(VnrDll)]
 			public static extern void Settings_SetClipboardFlag(bool flag);
 		}
-
-		public static class InnerP
-		{
-			[DllImport(VnrDll)]
-			[return: MarshalAs(UnmanagedType.Bool)]
-			public static extern bool Host_HandleCreateMutex(uint pid);
-		}
-
+		
 		#region Obsolete
 		// ReSharper disable UnusedMember.Global
 
