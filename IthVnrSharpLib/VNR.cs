@@ -35,6 +35,12 @@ namespace IthVnrSharpLib
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate void SetThreadCallback(uint num, IntPtr textThreadPointer);
 
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		public delegate uint RegisterPipeCallback(IntPtr text, IntPtr cmd, IntPtr thread);
+
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+		public delegate uint RegisterProcessRecordCallback(IntPtr processRecord, bool success);
+
 		// ReSharper disable once InconsistentNaming
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 		public delegate IntPtr GetThreadCallback(uint num);
@@ -45,18 +51,18 @@ namespace IthVnrSharpLib
 		// ReSharper disable once CollectionNeverQueried.Local
 		private readonly Dictionary<IntPtr, Delegate> _antiGcDict = new();
 
-		// ReSharper disable InconsistentNaming
-		private const string ITH_CLIENT_MUTEX = "VNR_CLIENT";   // ITH_DLL_RUNNING
+		// ReSharper disable once InconsistentNaming
 		private const string ITH_SERVER_MUTEX = "VNR_SERVER";   // ITH_RUNNING
-		internal static Mutex ITH_SERVER_HOOK_MUTEX = new(false, "VNR_SERVER_HOOK");
-		// ReSharper restore InconsistentNaming
-		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, -1);
+
+		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, 1);
 
 		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid) => Injector.InjectIntoProcess(pid);
-		public bool Host_Open(SetThreadCallback setThreadCallback, out string errorMessage)
+		public bool Host_Open(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
 		{
 			_antiGcList.Add(setThreadCallback);
+			_antiGcList.Add(registerPipeCallback);
+			_antiGcList.Add(registerProcessRecordCallback);
 			errorMessage = null;
 			var hServerMutex = IthCreateMutex(ITH_SERVER_MUTEX, true, out var present);
 			hServerMutex.Dispose();
@@ -65,7 +71,7 @@ namespace IthVnrSharpLib
 				errorMessage = "VNR is already running in a different process, try closing it and trying again.";
 				return false;
 			}
-			return Inner.Host.Host_Open2(setThreadCallback);
+			return Inner.Host.Host_Open2(setThreadCallback, registerPipeCallback, registerProcessRecordCallback);
 		}
 
 		internal static SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
@@ -81,8 +87,7 @@ namespace IthVnrSharpLib
 		public bool Host_IthCloseSystemService() => Inner.Host.Host_IthCloseSystemService();
 		public bool Host_Start() => Inner.Host.Host_Start();
 		public int Host_GetHookManager(ref IntPtr hookManagerPointer) => Inner.Host.Host_GetHookManager(ref hookManagerPointer);
-		public int Host_InsertHook(int pid, IntPtr hookParam, string name, HookManagerWrapper hookManager) => Inner.Host.Host_InsertHook(pid, hookParam, name,hookManager.HookManager);
-		public int Host_InsertHook(int pid, IntPtr hookParam, string name) => Inner.Host.Host_InsertHook(pid, hookParam, name);
+		public int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle) => Inner.Host.Host_InsertHook(hookParam, name, commandHandle);
 		#endregion
 
 		#region HookManager
@@ -140,7 +145,7 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_Open2(SetThreadCallback setThreadCallback);
+				public static extern bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecord);
 
 				[DllImport(VnrDll)]
 				[return: MarshalAs(UnmanagedType.Bool)]
@@ -164,17 +169,11 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				public static extern uint Host_AddLink(uint from, uint to);
-
-				[DllImport(VnrDll)]
-				public static extern int Host_InsertHook(int pid, IntPtr hookParam, string name);
 				
-				public static unsafe int Host_InsertHook(int pid, IntPtr hookParam, string name, IntPtr hookManager)
+				public static unsafe int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle)
 					{
-						//ITH_SERVER_HOOK_MUTEX.WaitOne();
 						try
 						{
-							var hCmd = HookManager.HookManager_GetCmdHandleByPID(hookManager, pid);
-							if (hCmd == IntPtr.Zero) return -1;
 							var hookParamName = name?.Substring(0, Math.Min(name.Length, IHS_SIZE));
 							var s = new InsertHookStruct
 							{
@@ -185,17 +184,13 @@ namespace IthVnrSharpLib
 								},
 								name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
 							};
-							WinAPI.NtWriteFile(hCmd, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr) (&s), IHS_SIZE,
+							WinAPI.NtWriteFile(commandHandle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr) (&s), IHS_SIZE,
 								IntPtr.Zero, IntPtr.Zero);
 						}
 						catch (Exception ex)
 						{
 							StaticHelpers.LogToFile(ex);
 							return -1;
-						}
-						finally
-						{
-							//ITH_SERVER_HOOK_MUTEX.ReleaseMutex();
 						}
 						return 0;
 					}
@@ -265,9 +260,7 @@ namespace IthVnrSharpLib
 
 				[DllImport(VnrDll)]
 				public static extern IntPtr HookManager_RegisterGetThreadCallback(IntPtr threadTable, GetThreadCallback data);
-
-				[DllImport(VnrDll)]
-				public static extern IntPtr HookManager_GetCmdHandleByPID(IntPtr hookManagerPointer, int pid);
+				
 			}
 
 			internal static class TextThread

@@ -84,6 +84,8 @@
     <Compile Include="HookParam.cs" />
     <Compile Include="Injector.cs" />
     <Compile Include="IthVnrSettings.cs" />
+    <Compile Include="PipeAndProcessRecordMap.cs" />
+    <Compile Include="PipeWithProcessRecord.cs" />
     <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SettingsJsonFile.cs" />

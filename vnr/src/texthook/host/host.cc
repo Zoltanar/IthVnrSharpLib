@@ -224,7 +224,7 @@ extern "C" IHFSERVICE BOOL IHFAPI Host_Open()
 }
 
 
-extern "C" IHFSERVICE BOOL IHFAPI Host_Open2(SetThreadCallback setThreadCallback)
+extern "C" IHFSERVICE BOOL IHFAPI Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecord)
 {
 	BOOL result = false;
 	EnterCriticalSection(&::cs);
@@ -237,7 +237,7 @@ extern "C" IHFSERVICE BOOL IHFAPI Host_Open2(SetThreadCallback setThreadCallback
 	else if (!::running) {
 		::running = true;
 		::settings = new Settings;
-		::man = new HookManager(setThreadCallback);
+		::man = new HookManager(setThreadCallback, registerPipeCallback, registerProcessRecord);
 		//cmdq = new CommandQueue;
 		InitializeCriticalSection(&detach_cs);
 
@@ -465,11 +465,6 @@ extern "C" IHFSERVICE bool IHFAPI Host_HijackProcess(DWORD pid)
 	//ITH_SYNC_HOOK;
 	HANDLE hCmd = man->GetCmdHandleByPID(pid);
 	return hCmd && sendCommand(hCmd, HOST_COMMAND_HIJACK_PROCESS);
-}
-
-extern "C" IHFSERVICE HANDLE IHFAPI HookManager_GetCmdHandleByPID(HookManager * hookman, DWORD pid)
-{
-	return hookman->GetCmdHandleByPID(pid);
 }
 
 extern "C" IHFSERVICE DWORD IHFAPI Host_InsertHook(DWORD pid, HookParam *hp, LPCSTR name)

@@ -180,8 +180,6 @@ namespace IthVnrSharpLib
 			}
 			//set as removed instead of removing
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
-			if (_viewModel.SelectedTextThread != null) return 0;
-			UpdateDisplayThread(ConsoleThread);
 			return 0;
 		}
 
@@ -195,9 +193,8 @@ namespace IthVnrSharpLib
 				Threads.TryRemove(associatedThread.Id, out _);
 				_viewModel.RemoveThreadFromDisplayCollection(associatedThread);
 			}
+			_viewModel.PipeAndRecordMap.RemoveProcess(pid);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
-			if (Threads.Values.Contains(_viewModel.SelectedTextThread)) return 0;
-			UpdateDisplayThread(ConsoleThread);
 			return 0;
 		}
 
@@ -308,21 +305,14 @@ namespace IthVnrSharpLib
 			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			GetOrCreateThread(threadPointer, out var thread);
 			if (!ShowLatestThread && (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay)) return len;
-			if (newLine)
-			{
-				return len;
-			}
+			if (newLine) return len;
 			if (thread.IsPosting || thread.IsDisplay)
 			{
 				thread.CurrentBytes.AddRange(value);
 				thread.StartTimer();
 			}
 			else thread.CurrentBytes.AddRange(value);
-			if (ShowLatestThread)
-			{
-				_viewModel.SelectedTextThread = thread;
-				thread.IsDisplay = true;
-			}
+			if (ShowLatestThread) thread.IsDisplay = true;
 			UpdateDisplayThread(thread);
 			return len;
 		}

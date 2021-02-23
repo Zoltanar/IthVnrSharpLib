@@ -21,9 +21,15 @@ namespace IthVnrSharpLib
 	/// You must call Initialize on Window Load
 	/// </summary>
 	[Serializable]
-	public class IthVnrViewModel : INotifyPropertyChanged
+	public partial class IthVnrViewModel : INotifyPropertyChanged
 	{
 		private VNR.SetThreadCallback _threadTableSetThread;
+		private VNR.RegisterPipeCallback _registerPipe;
+		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
+		private TextOutputEvent _updateDisplayText;
+		private bool _finalized;
+		private ThreadTableWrapper _threadTable;
+
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
 		public Commands Commands { get; protected set; }
@@ -53,8 +59,7 @@ namespace IthVnrSharpLib
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand TogglePostOthersCommand { get; }
 		public GameTextThread[] GameTextThreads { get; set; } = new GameTextThread[0];
-
-
+		
 		public bool Finalized
 		{
 			get => _finalized;
@@ -67,9 +72,7 @@ namespace IthVnrSharpLib
 			}
 		}
 
-		private TextOutputEvent _updateDisplayText;
-		private bool _finalized;
-		private ThreadTableWrapper _threadTable;
+		public PipeAndProcessRecordMap PipeAndRecordMap { get; set; }
 
 		public IthVnrViewModel()
 		{
@@ -97,12 +100,17 @@ namespace IthVnrSharpLib
 			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			_threadTable = new ThreadTableWrapper();
 			_threadTableSetThread = _threadTable.SetThread;
+			PipeAndRecordMap = new PipeAndProcessRecordMap();
+			_registerPipe = PipeAndRecordMap.RegisterPipe;
+			_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
+
 			VnrProxy.SaveObject(_threadTable);
-			if (VnrProxy.Host_Open(_threadTableSetThread, out errorMessage))
+			if (VnrProxy.Host_Open(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage))
 			{
 				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, _threadTable);
+				PipeAndRecordMap.HookManager = HookManager;
 				Application.Current.Exit += Finalize;
-				Commands = new Commands(HookManager, VnrProxy);
+				Commands = new Commands(VnrProxy, this);
 			}
 			else
 			{
@@ -112,7 +120,7 @@ namespace IthVnrSharpLib
 			OnPropertyChanged(nameof(HookManager));
 			OnPropertyChanged(nameof(DisplayProcesses));
 		}
-		
+
 		public void ReInitialize(out string errorMessage)
 		{
 			Initialize(_updateDisplayText, out errorMessage);
@@ -194,7 +202,6 @@ public void Finalize(object sender, ExitEventArgs e)
 				if (thread == selected) continue;
 				thread.IsPosting = toggleValue ??= !thread.IsPosting;
 			}
-			OnPropertyChanged(nameof(SelectedTextThread));
 		}
 
 		public void TogglePauseOtherThreads()

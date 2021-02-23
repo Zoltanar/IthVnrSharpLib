@@ -53,12 +53,14 @@ struct IHFSERVICE TCpy { void operator()(ThreadParameter *t1, const ThreadParame
 struct IHFSERVICE TLen { int operator()(const ThreadParameter *t); };
 
 typedef DWORD(*ProcessEventCallback)(DWORD pid);
+typedef DWORD(*RegisterPipeCallback)(HANDLE text, HANDLE cmd, HANDLE thread);
+typedef DWORD(*RegisterProcessRecordCallback)(ProcessRecord* record, BOOL success);
 
 class IHFSERVICE HookManager : public AVLTree<ThreadParameter, DWORD, TCmp, TCpy, TLen>
 {
 public:
   HookManager();
-  HookManager(SetThreadCallback setThreadCallback);
+  HookManager(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecord);
   ~HookManager();
   // jichi 12/26/2013: remove virtual modifiers
   TextThread *FindSingle(DWORD pid, DWORD hook, DWORD retn, DWORD split);
@@ -131,6 +133,16 @@ public:
     return (GetThreadCallback)_InterlockedExchange((long*)&(Table()->GetThreadExt), (long)cf);
   }
 
+  RegisterPipeCallback RegisterRegisterPipeCallback(RegisterPipeCallback cf)
+  {
+    return (RegisterPipeCallback)_InterlockedExchange((long*)&registerPipeExt, (long)cf);
+  }
+
+  RegisterProcessRecordCallback RegisterRegisterProcessRecordCallback(RegisterProcessRecordCallback cf)
+  {
+    return (RegisterProcessRecordCallback)_InterlockedExchange((long*)&registerProcessRecordExt, (long)cf);
+  }
+
   ProcessEventCallback ProcessNewHook() { return hook; }
   TextThread *GetCurrentThread() { return current; } // private
   ProcessRecord *Records() { return record; } // private
@@ -160,6 +172,8 @@ private:
   ProcessEventCallback attach,
                        detach,
                        hook;
+  RegisterPipeCallback registerPipeExt;
+  RegisterProcessRecordCallback registerProcessRecordExt;
   DWORD current_pid;
   ThreadTable *thread_table;
   HANDLE destroy_event;

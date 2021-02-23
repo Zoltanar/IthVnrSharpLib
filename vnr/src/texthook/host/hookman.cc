@@ -239,7 +239,7 @@ HookManager::HookManager() :
   destroy_event = IthCreateEvent(0, 0, 0);
 }
 
-HookManager::HookManager(SetThreadCallback setThreadCallback) :
+HookManager::HookManager(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecord) :
   // jichi 9/21/2013: Zero memory
   //CRITICAL_SECTION hmcs;
   current(nullptr)
@@ -269,6 +269,8 @@ HookManager::HookManager(SetThreadCallback setThreadCallback) :
   head.data = 0;
   thread_table = new ThreadTable; // jichi 9/26/2013: zero memory in ThreadTable
   RegisterSetThreadCallback(setThreadCallback);
+  RegisterRegisterPipeCallback(registerPipeCallback);
+  RegisterRegisterProcessRecordCallback(registerProcessRecord);
   TextThread* entry = new TextThread(0, -1, -1, -1, new_thread_number++);  // jichi 9/26/2013: zero memory in TextThread
   thread_table->SetThread(0, entry);
   SetCurrent(entry);
@@ -451,6 +453,7 @@ void HookManager::RegisterPipe(HANDLE text, HANDLE cmd, HANDLE thread)
     NtSetEvent(destroy_event, 0);
   else
     NtClearEvent(destroy_event);
+  if (registerPipeExt) registerPipeExt(text, cmd, thread);
 }
 void HookManager::RegisterProcess(DWORD pid, DWORD hookman, DWORD module)
 {
@@ -496,6 +499,7 @@ void HookManager::RegisterProcess(DWORD pid, DWORD hookman, DWORD module)
     //::man->AddConsoleOutput(ErrorOpenProcess);
     //LeaveCriticalSection(&hmcs);
     //ConsoleOutput("vnrhost:RegisterProcess: unlock");
+    if (registerProcessRecordExt) registerProcessRecordExt(&record[register_count - 1], false);
     return;
   }
 
@@ -519,8 +523,8 @@ void HookManager::RegisterProcess(DWORD pid, DWORD hookman, DWORD module)
     path[0] = 0;
   //swprintf(str,L"%.4d:%s", pid, wcsrchr(path, L'\\') + 1); // jichi 9/25/2013: this is useless?
   current_pid = pid;
-  if (attach)
-    attach(pid);
+  if (attach) attach(pid);
+  if (registerProcessRecordExt) registerProcessRecordExt(&record[register_count - 1], true);
   //LeaveCriticalSection(&hmcs);
   //ConsoleOutput("vnrhost:RegisterProcess: unlock");
 }

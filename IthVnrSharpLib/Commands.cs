@@ -9,6 +9,7 @@ namespace IthVnrSharpLib
 	public class Commands
 	{
 		private readonly HookManagerWrapper _hookManager;
+		private readonly IthVnrViewModel _viewModel;
 		private readonly VNR _vnrProxy;
 		private Regex ProcessNameRegex { get; } = new ("/pn(.+)", RegexOptions.IgnoreCase);
 		private Regex ProcessRegex { get; } = new ("/p(.+)", RegexOptions.IgnoreCase);
@@ -19,9 +20,10 @@ namespace IthVnrSharpLib
 		private Regex SearchRegex { get; } = new("(:s|:search) (.+)", RegexOptions.IgnoreCase);
 		private Regex SearchAllRegex { get; } = new("(:sa|:searchall) (.+)", RegexOptions.IgnoreCase);
 
-		public Commands(HookManagerWrapper hookManager, VNR vnrProxy)
+		public Commands(VNR vnrProxy, IthVnrViewModel viewModel)
 		{
-			_hookManager = hookManager;
+			_viewModel = viewModel;
+			_hookManager = viewModel.HookManager;
 			_vnrProxy = vnrProxy;
 		}
 
@@ -110,7 +112,9 @@ namespace IthVnrSharpLib
 			}
 			var hookParamPointer = (IntPtr) (&hp);
 			_hookManager.ConsoleOutput($"Parsed code to: {hp}", true);
-			var result = _vnrProxy.Host_InsertHook(pid, hookParamPointer, null, _hookManager);
+			var commandHandle = _viewModel.PipeAndRecordMap.GetCommandHandle(pid);
+			if (commandHandle == IntPtr.Zero) return false;
+			var result = _vnrProxy.Host_InsertHook(hookParamPointer, null, commandHandle);
 			return result == 0;
 		}
 

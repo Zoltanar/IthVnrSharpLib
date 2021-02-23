@@ -6,7 +6,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
 using System.Windows;
@@ -28,7 +27,6 @@ namespace IthVnrSharpLib
 		public static IthVnrViewModel ViewModel;
 		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
 		private const uint MaxHook = 64;
-		private static readonly Regex LatinOnlyRegex = new(@"^[a-zA-Z0-9:\/\\\r\n .!?,;@()_$^""]+$");
 
 		public bool Removed { get; set; }
 		public IntPtr Id { get; set; }
