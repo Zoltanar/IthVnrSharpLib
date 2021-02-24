@@ -56,6 +56,7 @@ namespace IthVnrSharpLib
 
 		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, 1);
 
+		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
 		public bool Host_InjectByPID(uint pid, out string errorMessage) => Injector.InjectIntoProcess(pid, out errorMessage);
 		public bool Host_Open(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
 		{
