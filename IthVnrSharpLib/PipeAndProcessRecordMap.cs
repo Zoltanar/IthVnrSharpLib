@@ -29,7 +29,7 @@ namespace IthVnrSharpLib
 		public uint RegisterProcessRecord(IntPtr processRecordPtr, bool success)
 		{
 			var processRecord = Marshal.PtrToStructure<ProcessRecord>(processRecordPtr);
-			if (success) HookManager?.ConsoleOutput($"Failed to attach process: pid_register {processRecord.pid_register}", true);
+			if (!success) HookManager?.ConsoleOutput($"Failed to attach process: pid_register {processRecord.pid_register}", true);
 			var lastItemWithoutProcess = _items.LastOrDefault(p => !p.HasProcess);
 			if (lastItemWithoutProcess == null) _items.Add(new PipeWithProcessRecord(processRecord));
 			else lastItemWithoutProcess.Process = processRecord;

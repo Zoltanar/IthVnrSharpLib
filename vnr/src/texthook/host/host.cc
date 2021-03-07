@@ -585,17 +585,6 @@ extern "C" IHFSERVICE void IHFAPI TextThread_RegisterOutputCallBack(TextThread* 
 	ptr->RegisterOutputCallBack(cb, data);
 }
 
-extern "C" IHFSERVICE int IHFAPI Host_IthInitSystemService()
-{
-	return IthInitSystemService();
-}
-
-extern "C" IHFSERVICE int IHFAPI Host_IthCloseSystemService()
-{
-	IthCloseSystemService();
-	return true;
-}
-
 extern "C" IHFSERVICE ProcessRecord* IHFAPI HookManager_GetProcessRecord(HookManager* ptr, DWORD pid)
 {
 	return ptr->GetProcessRecord(pid);

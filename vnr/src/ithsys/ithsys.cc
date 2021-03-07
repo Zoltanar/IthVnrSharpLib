@@ -725,7 +725,6 @@ BOOL IthInitSystemService()
   UNICODE_STRING us;
   OBJECT_ATTRIBUTES oa = {sizeof(oa), 0, &us, OBJ_CASE_INSENSITIVE, 0, 0};
   IO_STATUS_BLOCK ios;
-  HANDLE codepage_file;
   LARGE_INTEGER sec_size = {0x1000, 0};
   __asm
   {
@@ -824,78 +823,21 @@ BOOL IthInitSystemService()
       }
     }
   }
-
-  if (!NT_SUCCESS(NtOpenDirectoryObject(&::root_obj, READ_CONTROL|0xf, &oa)))
-    return FALSE;
-
+  if (!NT_SUCCESS(NtOpenDirectoryObject(&::root_obj, READ_CONTROL|0xf, &oa))) return FALSE;
   ::page = peb->InitAnsiCodePageData;
-
-  enum { CP932 = 932 };
-
-  // jichi 9/23/2013: Access violation on Wine
-  if (IthIsWine())
-    // One wine, there is no C_932.nls
-    //page_locale = 0x4e4; // 1252, English
-    //page_locale = GetACP(); // This will return 932 when LC_ALL=ja_JP.UTF-8 on wine
-    // Always set locale to CP932 on Wine, since C_932.nls could be missing.
-    ::page_locale = CP932;
-  else
-    ::page_locale = *(DWORD *)page >> 16;
-
-  if (::page_locale == CP932) {
-    oa.hRootDirectory = ::root_obj;
-    oa.uAttributes |= OBJ_OPENIF;
-  } else { // Unreachable or wine
-//#ifdef ITH_WINE
-//    // jichi 9/22/2013: For ChuSingura46+1 on Windows 7
-//    //t = L"C:\\Windows\\system32";
-//    wchar_t buffer[MAX_PATH];
-//    if (!t) { // jichi 9/22/2013: ITH is one wine
-//      if (UINT sz = ::GetSystemDirectoryW(buffer, MAX_PATH)) {
-//        buffer[sz] = 0;
-//        t = buffer;
-//      } else
-//        t = L"C:\\Windows\\System32"; // jichi 9/29/2013: sth is wrong here
-//    }
-//#endif // ITH_WINE
-
-    ::wcscpy(::file_path + 4, t);
-    t = ::file_path;
-    while(*++t);
-    if (*(t-1)!=L'\\')
-      *t++=L'\\';
-    ::wcscpy(t,L"C_932.nls");
-    RtlInitUnicodeString(&us, ::file_path);
-    if (!NT_SUCCESS(NtOpenFile(&codepage_file, FILE_READ_DATA, &oa, &ios,FILE_SHARE_READ,0)))
-      return FALSE;
-    oa.hRootDirectory = ::root_obj;
-    oa.uAttributes |= OBJ_OPENIF;
-    RtlInitUnicodeString(&us, L"JPN_CodePage");
-    if (!NT_SUCCESS(NtCreateSection(&codepage_section, SECTION_MAP_READ,
-        &oa,0, PAGE_READONLY, SEC_COMMIT, codepage_file)))
-      return FALSE;
-    NtClose(codepage_file);
-    size = 0;
-    ::page = nullptr;
-    if (!NT_SUCCESS(NtMapViewOfSection(::codepage_section, NtCurrentProcess(),
-        &::page,
-        0, 0, 0, &size, ViewUnmap, 0,
-        PAGE_READONLY)))
-      return FALSE;
-  }
-  if (ITH_ENABLE_THREADMAN) {
+  //Setting codepage from system locale was failing when locale is English (UK) for whatever reason but works with Japanese/Japan, 
+  //just setting it to 932 at all times should work.
+  ::page_locale = 932;
+  oa.hRootDirectory = ::root_obj;
+  oa.uAttributes |= OBJ_OPENIF;
+  if (ITH_ENABLE_THREADMAN) 
+  {
     RtlInitUnicodeString(&us, ITH_THREADMAN_SECTION);
-    if (!NT_SUCCESS(NtCreateSection(&thread_man_section, SECTION_ALL_ACCESS, &oa, &sec_size,
-        PAGE_EXECUTE_READWRITE, SEC_COMMIT, 0)))
-      return FALSE;
+    if (!NT_SUCCESS(NtCreateSection(&thread_man_section, SECTION_ALL_ACCESS, &oa, &sec_size, PAGE_EXECUTE_READWRITE, SEC_COMMIT, 0))) return FALSE;
     size = 0;
     // http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/Section/NtMapViewOfSection.html
     thread_man_ = nullptr;
-    if (!NT_SUCCESS(NtMapViewOfSection(thread_man_section, NtCurrentProcess(),
-       (LPVOID *)&thread_man_,
-       0,0,0, &size, ViewUnmap, 0,
-       PAGE_EXECUTE_READWRITE)))
-      return FALSE;
+    if (!NT_SUCCESS(NtMapViewOfSection(thread_man_section, NtCurrentProcess(), (LPVOID*)&thread_man_,0,0,0, &size, ViewUnmap, 0, PAGE_EXECUTE_READWRITE))) return FALSE;
   }
   return TRUE;
 }
@@ -904,10 +846,6 @@ BOOL IthInitSystemService()
 //After destroying the heap, all memory allocated by ITH module is returned to system.
 void IthCloseSystemService()
 {
-  if (::page_locale != 0x3a4) {
-    NtUnmapViewOfSection(NtCurrentProcess(), ::page);
-    NtClose(::codepage_section);
-  }
   if (ITH_ENABLE_THREADMAN) {
     NtUnmapViewOfSection(NtCurrentProcess(), ::thread_man_);
     NtClose(::thread_man_section);

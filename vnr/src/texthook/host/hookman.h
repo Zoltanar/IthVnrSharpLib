@@ -7,6 +7,7 @@
 #include "host/avl_p.h"
 #include "host/textthread.h"
 #include "winmutex/winmutex.h"
+#include "vnrhook/include/types.h"
 
 namespace pugi {
 	class xml_node;
@@ -81,7 +82,9 @@ public:
   void AddConsoleOutput(LPCWSTR text);
 
   // jichi 10/27/2013: Add const; add space.
-  void DispatchText(DWORD pid, const BYTE *text, DWORD hook, DWORD retn, DWORD split, int len, bool space);
+  void DispatchText(DWORD pid, const BYTE *text, DWORD hook, DWORD retn, DWORD split, int len, bool space); 
+  bool GetHookParam2(DWORD pid, DWORD hook_addr, HookParam& hp);
+  void GetCode(const HookParam& hp, LPWSTR buffer, DWORD pid);
 
   void ClearText(DWORD pid, DWORD hook, DWORD retn, DWORD split); // private
   void RemoveProcessContext(DWORD pid); // private

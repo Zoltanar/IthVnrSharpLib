@@ -34,7 +34,7 @@ namespace IthVnrSharpLib
 
 		[DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
 		public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
-
+		
 		[DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
 		public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
 
@@ -81,6 +81,12 @@ namespace IthVnrSharpLib
 			IntPtr key
 		);
 
+		[DllImport("kernel32.dll", SetLastError = true)]
+		public static extern IntPtr LoadLibrary(string libraryName);
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		public static extern bool FreeLibrary(IntPtr hModule);
+		
 		[Flags]
 		public enum AllocationType : uint
 		{

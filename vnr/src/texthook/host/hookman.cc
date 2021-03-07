@@ -699,18 +699,46 @@ void HookManager::DispatchText(DWORD pid, const BYTE *text, DWORD hook, DWORD re
       DOUT("found new thread");
       char entstr[0x200];
       it->GetEntryString(entstr);
+      HookParam hp = {};
+      if (GetHookParam2(it->PID(), it->Addr(), hp)) 
+      {
+        LPWSTR str = new WCHAR[2048];
+        GetCode(hp,str, it->PID());
+        DOUT(str);
+      }
       DOUT(entstr);
       while (thread_table->FindThread(++new_thread_number));
       if (create)
         create(it);
     }
-    if (it)
-      it->AddText(text, len, false, space); // jichi 10/27/2013: new line is false
+    if (it) it->AddText(text, len, false, space); // jichi 10/27/2013: new line is false
     //LeaveCriticalSection(&hmcs);
     //ConsoleOutput("vnrhost:DispatchText: unlock");
   //} catch (...) {
   //  // ignored
   //}
+}
+
+bool HookManager::GetHookParam2(DWORD pid, DWORD hook_addr, HookParam& hp)
+{
+  if (!pid)	return false;
+  ProcessRecord* pr = ::man->GetProcessRecord(pid);
+  if (!pr)
+    return false;
+  bool result = false;
+  WaitForSingleObject(pr->hookman_mutex, 0);
+  const Hook* hks = (Hook*)pr->hookman_map;
+  for (int i = 0; i < MAX_HOOK; i++)
+  {
+    if (hks[i].Address() == hook_addr)
+    {
+      hp = hks[i].hp;
+      result = true;
+      break;
+    }
+  }
+  ReleaseMutex(pr->hookman_mutex);
+  return result;
 }
 
 void HookManager::AddConsoleOutput(LPCWSTR text)
@@ -842,7 +870,7 @@ HANDLE  GetCmdHandleByPID(DWORD pid) { return ::man->GetCmdHandleByPID(pid); }
 //void AddLink(WORD from, WORD to) { ::man->AddLink(from, to); }
 
 // jichi 9/27/2013: Unparse to hook parameters /H code
-void GetCode(const HookParam &hp, LPWSTR buffer, DWORD pid)
+void HookManager::GetCode(const HookParam &hp, LPWSTR buffer, DWORD pid)
 {
   WCHAR c;
   LPWSTR ptr = buffer;

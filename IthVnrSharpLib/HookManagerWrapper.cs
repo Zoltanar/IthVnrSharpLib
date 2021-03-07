@@ -23,7 +23,7 @@ namespace IthVnrSharpLib
 		private VNR.ProcessEventCallback _removeProcessList;
 		private VNR.ThreadEventCallback _threadRemove;
 		private VNR.ThreadEventCallback _threadReset;
-		private VNR.GetThreadCallback _threadTableGetThread;
+		private VNR.UIntReturnPtr _threadTableGetThread;
 		// ReSharper restore PrivateFieldCanBeConvertedToLocalVariable
 		
 		private readonly IthVnrViewModel _viewModel;

@@ -21,7 +21,7 @@ namespace IthVnrSharpLib
 	/// You must call Initialize on Window Load
 	/// </summary>
 	[Serializable]
-	public partial class IthVnrViewModel : INotifyPropertyChanged
+	public class IthVnrViewModel : INotifyPropertyChanged
 	{
 		private VNR.SetThreadCallback _threadTableSetThread;
 		private VNR.RegisterPipeCallback _registerPipe;
@@ -59,7 +59,7 @@ namespace IthVnrSharpLib
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand TogglePostOthersCommand { get; }
 		public GameTextThread[] GameTextThreads { get; set; } = new GameTextThread[0];
-		
+
 		public bool Finalized
 		{
 			get => _finalized;
@@ -97,22 +97,21 @@ namespace IthVnrSharpLib
 			ClearThreadDisplayCollection();
 			InitVnrProxy();
 			_updateDisplayText = updateDisplayText;
-			if (!VnrProxy.Host_IthInitSystemService()) Process.GetCurrentProcess().Kill();
 			_threadTable = new ThreadTableWrapper();
 			_threadTableSetThread = _threadTable.SetThread;
 			PipeAndRecordMap = new PipeAndProcessRecordMap();
 			_registerPipe = PipeAndRecordMap.RegisterPipe;
 			_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
-
 			VnrProxy.SaveObject(_threadTable);
-			if (VnrProxy.Host_Open(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage))
+			var result = VnrProxy.Host_Open2(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage);
+			if (result)
 			{
 				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, _threadTable);
 				PipeAndRecordMap.HookManager = HookManager;
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(VnrProxy, this);
 			}
-			else
+			if (!result)
 			{
 				Finalize(null, null);
 				Finalized = true;
@@ -132,8 +131,9 @@ namespace IthVnrSharpLib
 		/// </summary>
 		public virtual void ClearThreadDisplayCollection()
 		{
-			if (Finalized) return;
-			Application.Current.Dispatcher.Invoke(()=> DisplayThreads.Clear());
+			var dispatcher = Application.Current?.Dispatcher;
+			if (Finalized || dispatcher is null) return;
+			dispatcher.Invoke(() => DisplayThreads.Clear());
 		}
 
 		/// <summary>
@@ -156,19 +156,20 @@ namespace IthVnrSharpLib
 		{
 			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.FirstOrDefault(x => x.Tag == textThread)));
 		}
-		
-public void Finalize(object sender, ExitEventArgs e)
+
+		public void Finalize(object sender, ExitEventArgs e)
 		{
 			if (Finalized) return;
-			Finalized = true;
 			var exitWatch = Stopwatch.StartNew();
 			Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Starting exit procedures...");
 			try
 			{
 				Settings.Save();
 				SaveGameTextThreads();
+				ClearThreadDisplayCollection();
 				HookManager?.Dispose();
 				VnrProxy?.Exit();
+				VnrProxy = null;
 				if (IthVnrDomain != null) AppDomain.Unload(IthVnrDomain);
 			}
 			catch (Exception ex)
@@ -192,7 +193,7 @@ public void Finalize(object sender, ExitEventArgs e)
 		{
 			//can be overridden to save game text threads to persistant data storage
 		}
-		
+
 		public void TogglePostOtherThreads()
 		{
 			var selected = SelectedTextThread;

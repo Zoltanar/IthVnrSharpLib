@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -14,67 +17,105 @@ namespace IthVnrSharpLib
 {
 	// ReSharper disable once InconsistentNaming
 	[UsedImplicitly]
-	public class VNR : MarshalByRefObject
+	public class VNR : MarshalByRefObject, IDisposable
 	{
-		public const string VnrDll = "vnrhost.dll";
+		//private const string VnrDll = "vnrhost.dll";
+		private const string VnrDll2 = "vnrhost.dll";
+		private const string HookDllName = "vnrhook.dll";
+
+		private const string IthServerMutex = "VNR_SERVER";
+		private const int IhsSize = 0x80;
+
+		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, 1);
+		private static readonly Dictionary<Type, int> TypeSizes = new()
+		{
+			{ typeof(Delegate), 4 },
+			{ typeof(IntPtr), 4 },
+			{ typeof(bool), 4 },
+			{ typeof(int), 4 },
+			{ typeof(uint), 4 },
+		};
+
+		private bool _hostOpen;
+		private bool _disposed;
+		private IntPtr _libraryHandle;
+		// ReSharper disable CollectionNeverQueried.Local
+		private readonly List<object> _antiGcList = new();
+		private readonly Dictionary<IntPtr, Delegate> _antiGcDict = new();
+		// ReSharper restore CollectionNeverQueried.Local
+		private readonly Dictionary<string, Delegate> _externalDelegates = new();
 
 		public override object InitializeLifetimeService() => null;
 
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate int ThreadEventCallback(IntPtr thread);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate int ProcessEventCallback(int pid);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate void ConsoleCallback(string text);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate int ThreadOutputFilterCallback(IntPtr thread, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] value, int len, bool newLine, IntPtr data, bool space);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate void SetThreadCallback(uint num, IntPtr textThreadPointer);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate uint RegisterPipeCallback(IntPtr text, IntPtr cmd, IntPtr thread);
-
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate uint RegisterProcessRecordCallback(IntPtr processRecord, bool success);
-
+		#region Delegates
 		// ReSharper disable once InconsistentNaming
-		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-		public delegate IntPtr GetThreadCallback(uint num);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate IntPtr GetThreadCallback(uint num);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int ThreadEventCallback(IntPtr thread);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int ProcessEventCallback(int pid);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int ThreadOutputFilterCallback(IntPtr thread, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] value, int len, bool newLine, IntPtr data, bool space);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void SetThreadCallback(uint num, IntPtr textThreadPointer);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate uint RegisterPipeCallback(IntPtr text, IntPtr cmd, IntPtr thread);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate uint RegisterProcessRecordCallback(IntPtr processRecord, bool success);
+		private delegate int RefPtrReturnIntDelegate(ref IntPtr pointerRef);
+		private delegate bool HostOpenDelegate(SetThreadCallback setThread, RegisterPipeCallback registerPipe, RegisterProcessRecordCallback registerProcessRecord);
+		private delegate IntPtr RegisterGetThreadDelegate(IntPtr threadTable, GetThreadCallback data);
+		private delegate uint RegisterThreadEventDelegate(IntPtr hookManagerPointer, ThreadEventCallback cb);
+		private delegate void RegisterOutputDelegate(IntPtr textThread, ThreadOutputFilterCallback cb, IntPtr data);
+		private delegate void RegisterProcessEventDelegate(IntPtr hookManager, ProcessEventCallback cb);
+		private delegate bool ReturnBoolDelegate();
+		private delegate bool UIntReturnBoolDelegate(uint dword);
+		private delegate IntPtr PtrAndUIntReturnPtrDelegate(IntPtr ptr, uint dword);
+		private delegate IntPtr PtrReturnPtrDelegate(IntPtr ptr);
+		private delegate uint PtrReturnUIntDelegate(IntPtr ptr);
+		private delegate void PtrAndUIntDelegate(IntPtr ptr, uint dword);
+		private delegate ushort PtrReturnUShortDelegate(IntPtr ptr);
+		#endregion
 
-		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly List<object> _antiGcList = new();
-
-		// ReSharper disable once CollectionNeverQueried.Local
-		private readonly Dictionary<IntPtr, Delegate> _antiGcDict = new();
-
-		// ReSharper disable once InconsistentNaming
-		private const string ITH_SERVER_MUTEX = "VNR_SERVER";   // ITH_RUNNING
-
-		private static readonly IntPtr InvalidHandleValue = IntPtr.Subtract(IntPtr.Zero, 1);
-
-		public bool Host_HijackProcess(uint pid) => Inner.Host.Host_HijackProcess(pid);
-		public bool Host_InjectByPID(uint pid, out string errorMessage) => Injector.InjectIntoProcess(pid, out errorMessage);
-		public bool Host_Open(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
+		public VNR()
 		{
-			_antiGcList.Add(setThreadCallback);
-			_antiGcList.Add(registerPipeCallback);
-			_antiGcList.Add(registerProcessRecordCallback);
-			errorMessage = null;
-			var hServerMutex = IthCreateMutex(ITH_SERVER_MUTEX, true, out var present);
-			hServerMutex.Dispose();
-			if (present)
-			{
-				errorMessage = "VNR is already running in a different process, try closing it and trying again.";
-				return false;
-			}
-			return Inner.Host.Host_Open2(setThreadCallback, registerPipeCallback, registerProcessRecordCallback);
+			_libraryHandle = WinAPI.LoadLibrary(VnrDll2);
+			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
 		}
 
-		internal static SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
+		private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
+		{
+			Debug.Assert(functionName != null, nameof(functionName) + " != null");
+			if (!_externalDelegates.TryGetValue(functionName, out var func))
+			{
+				var numArgs = GetBytesForArgs(typeof(T));
+				var funcName = $"_{functionName}@{numArgs}";
+				var functionPointer = WinAPI.GetProcAddress(_libraryHandle, funcName);
+				if (functionPointer == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+				func = _externalDelegates[functionName] = Marshal.GetDelegateForFunctionPointer(functionPointer, typeof(T));
+			}
+			return (T)func;
+		}
+		
+		private static int GetBytesForArgs(Type type)
+		{
+			int total = 0;
+			try
+			{
+				var invoke = type.GetMethod("Invoke");
+				if (invoke == null) return total;
+				var parameters = invoke.GetParameters();
+				foreach (var param in parameters)
+				{
+					var paramType = param.ParameterType;
+					var size = paramType.IsByRef ? 4 : TypeSizes.FirstOrDefault(t => paramType == t.Key || paramType.IsSubclassOf(t.Key)).Value;
+					if(size <= 0) { }
+					total += size;
+				}
+				return total;
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				return -1;
+			}
+		}
+		
+		private static SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
 		{
 			var ret = new Mutex(initialOwner, name, out var createdNew);
 			exist = !createdNew || ret.SafeWaitHandle.DangerousGetHandle() == InvalidHandleValue;
@@ -82,336 +123,225 @@ namespace IthVnrSharpLib
 		}
 
 		#region Host
-		public bool Host_Close() => Inner.Host.Host_Close();
-		public bool Host_IthInitSystemService() => Inner.Host.Host_IthInitSystemService();
-		public bool Host_IthCloseSystemService() => Inner.Host.Host_IthCloseSystemService();
-		public bool Host_Start() => Inner.Host.Host_Start();
-		public int Host_GetHookManager(ref IntPtr hookManagerPointer) => Inner.Host.Host_GetHookManager(ref hookManagerPointer);
-		public int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle) => Inner.Host.Host_InsertHook(hookParam, name, commandHandle);
+		public bool Host_HijackProcess(uint pid) => GetExternalDelegate<UIntReturnBoolDelegate>()(pid);
+		public bool Host_InjectByPID(uint processId, out string errorMessage)
+		{
+			bool result;
+			Process currentProcess = null;
+			IntPtr? procHandle = null;
+			IntPtr? allocMemAddress = null;
+			uint dataSize = 0;
+			try
+			{
+				currentProcess = Process.GetCurrentProcess();
+				if (currentProcess.Id == processId)
+				{
+					errorMessage = "Attempt to inject into own process denied.";
+					return false;
+				}
+				bool newlyAttached = GetExternalDelegate<UIntReturnBoolDelegate>("Host_HandleCreateMutex")(processId);
+				if (!newlyAttached)
+				{
+					errorMessage = "Mutex already existed (likely already attached to target process).";
+					return false;
+				}
+				// geting the handle of the process - with required privileges
+				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, (int)processId);
+				// searching for the address of LoadLibraryW and storing it in a pointer
+				var loadLibraryAddr = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+				// name of the dll we want to inject
+				string dllName = Path.GetFullPath(HookDllName);
+				var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
+				dataSize = (uint)dllNameBytes.Length;
+				// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
+				allocMemAddress = WinAPI.VirtualAllocEx(procHandle.Value, IntPtr.Zero, dataSize,
+					WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
+				// writing the name of the dll there
+				WinAPI.WriteProcessMemory(procHandle.Value, allocMemAddress.Value, dllNameBytes, dataSize, out _);
+				// creating a thread that will call LoadLibraryW with allocMemAddress as argument
+				var thread = WinAPI.CreateRemoteThread(procHandle.Value, IntPtr.Zero, 0, loadLibraryAddr, allocMemAddress.Value, 0,
+					IntPtr.Zero);
+				if (thread != IntPtr.Zero)
+				{
+					var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(thread, 3000);
+					WinAPI.CloseHandle(thread);
+					result = waitResult == WinAPI.WaitReturnCode.WAIT_OBJECT_0;
+					errorMessage = result != true ? $"Failed while loading {HookDllName} library: {waitResult}" : string.Empty;
+				}
+				else
+				{
+					result = false;
+					errorMessage = "Failed to create thread to load library.";
+				}
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				errorMessage = $"Failed to inject: {ex}";
+				result = false;
+			}
+			finally
+			{
+				currentProcess?.Dispose();
+				if(allocMemAddress != null) WinAPI.VirtualFreeEx(procHandle.Value, allocMemAddress.Value, dataSize, WinAPI.AllocationType.Release);
+				if(procHandle != null) WinAPI.CloseHandle(procHandle.Value);
+			}
+			return result;
+		}
+
+		public bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
+		{
+			_antiGcList.Add(setThreadCallback);
+			_antiGcList.Add(registerPipeCallback);
+			_antiGcList.Add(registerProcessRecordCallback);
+			errorMessage = null;
+			var hServerMutex = IthCreateMutex(IthServerMutex, true, out var present);
+			hServerMutex.Dispose();
+			if (present)
+			{
+				errorMessage = "VNR is already running in a different process, try closing it and trying again.";
+				return false;
+			}
+			_hostOpen = GetExternalDelegate<HostOpenDelegate>()(setThreadCallback, registerPipeCallback, registerProcessRecordCallback);
+			return _hostOpen;
+		}
+
+		public bool Host_Close() => GetExternalDelegate<ReturnBoolDelegate>()();
+		public bool Host_Start() => GetExternalDelegate<ReturnBoolDelegate>()();
+		public int Host_GetHookManager(ref IntPtr hookManagerPointer) => GetExternalDelegate<RefPtrReturnIntDelegate>()(ref hookManagerPointer);
+
+		public unsafe int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle)
+		{
+			try
+			{
+				var hookParamName = name?.Substring(0, Math.Min(name.Length, IhsSize));
+				var s = new InsertHookStruct
+				{
+					sp =
+					{
+						type = (uint) HostCommandType.HOST_COMMAND_NEW_HOOK,
+						hp = Marshal.PtrToStructure<HookParam>(hookParam)
+					},
+					name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
+				};
+				WinAPI.NtWriteFile(commandHandle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr)(&s), IhsSize,
+					IntPtr.Zero, IntPtr.Zero);
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				return -1;
+			}
+			return 0;
+		}
 		#endregion
 
 		#region HookManager
-		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
+		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => GetExternalDelegate<PtrAndUIntReturnPtrDelegate>()(hookManager, pid);//Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
 		public void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
 			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterProcessAttachCallback(hookManager, callback);
+			GetExternalDelegate<RegisterProcessEventDelegate>()(hookManager, callback);
 		}
 		public void HookManager_RegisterProcessDetachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
 			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterProcessDetachCallback(hookManager, callback);
+			GetExternalDelegate<RegisterProcessEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadCreateCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
 			_antiGcList.Add(callback);
-			return Inner.HookManager.HookManager_RegisterThreadCreateCallback(hookManager, callback);
+			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadRemoveCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
 			_antiGcList.Add(callback);
-			return Inner.HookManager.HookManager_RegisterThreadRemoveCallback(hookManager, callback);
+			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadResetCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
 			_antiGcList.Add(callback);
-			return Inner.HookManager.HookManager_RegisterThreadResetCallback(hookManager, callback);
+			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
+		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
+		{
+			_antiGcList.Add(callback);
+			GetExternalDelegate<RegisterGetThreadDelegate>("HookManager_RegisterGetThreadCallback")(hookManagerPointer, callback);
+		}
+
 		#endregion
 
 		#region TextThread
-		public IntPtr TextThread_GetThreadParameter(IntPtr textThread) => Inner.TextThread.TextThread_GetThreadParameter(textThread);
-		public uint TextThread_GetStatus(IntPtr textThread) => Inner.TextThread.TextThread_GetStatus(textThread);
-		public void TextThread_SetStatus(IntPtr textThread, uint status) => Inner.TextThread.TextThread_SetStatus(textThread, status);
-		public ushort TextThread_GetNumber(IntPtr textThread) => Inner.TextThread.TextThread_GetNumber(textThread);
+
+		public IntPtr TextThread_GetThreadParameter(IntPtr textThread) => GetExternalDelegate<PtrReturnPtrDelegate>()(textThread);
+		public uint TextThread_GetStatus(IntPtr textThread) => GetExternalDelegate<PtrReturnUIntDelegate>()(textThread);
+		public void TextThread_SetStatus(IntPtr textThread, uint status) => GetExternalDelegate<PtrAndUIntDelegate>()(textThread, status);
+		public ushort TextThread_GetNumber(IntPtr textThread) => GetExternalDelegate<PtrReturnUShortDelegate>()(textThread);
 		public void TextThread_RegisterOutputCallBack(IntPtr textThread, ThreadOutputFilterCallback callback, IntPtr data)
 		{
 			if (callback == null) _antiGcDict.Remove(textThread);
 			else _antiGcDict[textThread] = callback;
-			Inner.TextThread.TextThread_RegisterOutputCallBack(textThread, callback, data);
+			GetExternalDelegate<RegisterOutputDelegate>()(textThread, callback, data);
 		}
-		#endregion
-
-		internal static class Inner
-		{
-			internal static class Host
-			{
-				// ReSharper disable once InconsistentNaming
-				private const int IHS_SIZE = 0x80;
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_HijackProcess(uint pid);
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecord);
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_Close();
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_IthInitSystemService();
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_IthCloseSystemService();
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_Start();
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern int Host_UnLink(int from);
-
-				[DllImport(VnrDll)]
-				public static extern uint Host_AddLink(uint from, uint to);
-
-				public static unsafe int Host_InsertHook(IntPtr hookParam, string name, IntPtr commandHandle)
-				{
-					try
-					{
-						var hookParamName = name?.Substring(0, Math.Min(name.Length, IHS_SIZE));
-						var s = new InsertHookStruct
-						{
-							sp =
-								{
-									type = (uint) HostCommandType.HOST_COMMAND_NEW_HOOK,
-									hp = Marshal.PtrToStructure<HookParam>(hookParam)
-								},
-							name_buffer = hookParamName == null ? IntPtr.Zero : Marshal.StringToHGlobalAuto(hookParamName)
-						};
-						WinAPI.NtWriteFile(commandHandle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out _, (IntPtr)(&s), IHS_SIZE,
-							IntPtr.Zero, IntPtr.Zero);
-					}
-					catch (Exception ex)
-					{
-						StaticHelpers.LogToFile(ex);
-						return -1;
-					}
-					return 0;
-				}
-
-				[StructLayout(LayoutKind.Sequential)]
-				private struct InsertHookStruct
-				{
-					public SendParam sp;
-					public IntPtr name_buffer;
-				}
-
-				[StructLayout(LayoutKind.Sequential)]
-				private struct SendParam
-				{
-					public uint type;
-					public HookParam hp;
-				};
-
-				private enum HostCommandType
-				{
-					HOST_COMMAND = -1 // null type
-					, HOST_COMMAND_NEW_HOOK = 0
-					, HOST_COMMAND_REMOVE_HOOK = 1
-					, HOST_COMMAND_MODIFY_HOOK = 2
-					, HOST_COMMAND_HIJACK_PROCESS = 3
-					, HOST_COMMAND_DETACH = 4
-				}
-
-				[DllImport(VnrDll)]
-				public static extern int Host_GetHookManager(ref IntPtr hookManagerPointer);
-
-				[DllImport(VnrDll)]
-				public static extern void Host_GetHookName([MarshalAs(UnmanagedType.LPStr)] StringBuilder str, uint parameterPid, uint parameterHook, uint length);
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.Bool)]
-				public static extern bool Host_HandleCreateMutex(uint pid);
-			}
-
-			internal static class HookManager
-			{
-				[DllImport(VnrDll)]
-				public static extern uint HookManager_RegisterThreadCreateCallback(IntPtr hookManagerPointer, ThreadEventCallback cb);
-
-				[DllImport(VnrDll)]
-				public static extern uint HookManager_RegisterThreadRemoveCallback(IntPtr hookManagerPointer, ThreadEventCallback cb);
-
-				[DllImport(VnrDll)]
-				public static extern uint HookManager_RegisterThreadResetCallback(IntPtr hookManagerPointer, ThreadEventCallback cb);
-
-				[DllImport(VnrDll)]
-				public static extern IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid);
-
-				[DllImport(VnrDll, CallingConvention = CallingConvention.StdCall)]
-				public static extern void HookManager_RegisterConsoleCallback(IntPtr hookManager, ConsoleCallback consoleOutput);
-
-				[DllImport(VnrDll)]
-				public static extern void HookManager_RegisterAddRemoveLinkCallback(IntPtr hookManager, ThreadEventCallback addRemoveLink);
-
-				[DllImport(VnrDll)]
-				public static extern void HookManager_RegisterProcessNewHookCallback(IntPtr hookManager, ProcessEventCallback refreshProfileOnNewHook);
-
-				[DllImport(VnrDll)]
-				public static extern void HookManager_RegisterProcessDetachCallback(IntPtr hookManager, ProcessEventCallback removeProcessList);
-
-				[DllImport(VnrDll)]
-				public static extern void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback registerProcessList);
-
-				[DllImport(VnrDll, CallingConvention = CallingConvention.StdCall)]
-				public static extern void HookManager_AddConsoleOutput(IntPtr hookManager, [MarshalAs(UnmanagedType.LPWStr)] string text);
-
-				[DllImport(VnrDll)]
-				public static extern IntPtr HookManager_RegisterGetThreadCallback(IntPtr threadTable, GetThreadCallback data);
-
-			}
-
-			internal static class TextThread
-			{
-				[DllImport(VnrDll, CallingConvention = CallingConvention.StdCall)]
-				public static extern void TextThread_RegisterOutputCallBack(IntPtr textThread, ThreadOutputFilterCallback cb, IntPtr data);
-
-				[DllImport(VnrDll)]
-				public static extern void TextThread_RegisterFilterCallBack(IntPtr textThread, ThreadOutputFilterCallback cb, IntPtr data);
-
-				[DllImport(VnrDll)]
-				public static extern IntPtr TextThread_GetThreadParameter(IntPtr textThread);
-
-				[DllImport(VnrDll)]
-				public static extern uint TextThread_GetStatus(IntPtr textThread);
-
-				[DllImport(VnrDll)]
-				public static extern void TextThread_SetStatus(IntPtr textThread, uint status);
-
-				[DllImport(VnrDll)]
-				public static extern ushort TextThread_GetNumber(IntPtr textThread);
-
-				[DllImport(VnrDll)]
-				public static extern bool TextThread_GetEntryString(IntPtr textThread, StringBuilder str, int len);
-
-				[DllImport(VnrDll)]
-				public static extern bool SetTextThreadUnicodeStatus(IntPtr textThread, IntPtr processRecord, uint hook);
-
-				[DllImport(VnrDll, CharSet = CharSet.Unicode)]
-				public static extern void TextThread_GetLink(IntPtr textThread, [MarshalAs(UnmanagedType.LPWStr)] StringBuilder str, int len);
-
-				[DllImport(VnrDll)]
-				[return: MarshalAs(UnmanagedType.LPStr)]
-				public static extern string TextThread_GetThreadString(IntPtr textThread);
-			}
-
-			[DllImport(VnrDll)]
-			public static extern int Settings_GetSplittingInterval();
-
-			[DllImport(VnrDll)]
-			public static extern void Settings_SetSplittingInterval(int interval);
-
-			[DllImport(VnrDll)]
-			public static extern bool Settings_GetClipboardFlag();
-
-			[DllImport(VnrDll)]
-			public static extern void Settings_SetClipboardFlag(bool flag);
-		}
-		
-		#region Obsolete
-		// ReSharper disable UnusedMember.Global
-
-		[Obsolete("Use HookManager.AddLink")]
-		public uint Host_AddLink(uint from, uint to) => Inner.Host.Host_AddLink(from, to);
-		[Obsolete("Use TextThread.LinkTo = null")]
-		public int Host_UnLink(int from) => Inner.Host.Host_UnLink(from);
-
-		[Obsolete("ClipboardFlag handled in C#")]
-		public bool Settings_GetClipboardFlag() => Inner.Settings_GetClipboardFlag();
-		[Obsolete("ClipboardFlag handled in C#")]
-		public void Settings_SetClipboardFlag(bool flag) => Inner.Settings_SetClipboardFlag(flag);
-
-		[Obsolete("SplittingInterval handled in C#")]
-		public int Settings_GetSplittingInterval() => Inner.Settings_GetSplittingInterval();
-		[Obsolete("SplittingInterval handled in C#")]
-		public void Settings_SetSplittingInterval(int interval) => Inner.Settings_SetSplittingInterval(interval);
-
-		[Obsolete("Unused")]
-		public void TextThread_RegisterFilterCallBack(IntPtr hookManager, ThreadOutputFilterCallback callback, IntPtr data)
-		{
-			_antiGcList.Add(callback);
-			Inner.TextThread.TextThread_RegisterFilterCallBack(hookManager, callback, data);
-		}
-
-		[Obsolete("Using C# Links (HookManager.AddLink)")]
-		public void HookManager_RegisterAddRemoveLinkCallback(IntPtr hookManager, ThreadEventCallback callback)
-		{
-			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterAddRemoveLinkCallback(hookManager, callback);
-		}
-
-		[Obsolete("Use C# Console Thread")]
-		public void HookManager_AddConsoleOutput(IntPtr hookManager, string text) => Inner.HookManager.HookManager_AddConsoleOutput(hookManager, text);
-
-		[Obsolete("Unused")]
-		public void HookManager_RegisterProcessNewHookCallback(IntPtr hookManager, ProcessEventCallback callback)
-		{
-			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterProcessNewHookCallback(hookManager, callback);
-		}
-
-		[Obsolete("Use C# Console Thread")]
-		public void HookManager_RegisterConsoleCallback(IntPtr hookManager, ConsoleCallback callback)
-		{
-			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterConsoleCallback(hookManager, callback);
-		}
-
-		[Obsolete("Use TextThread.SetEntryString")]
-		public bool TextThread_GetEntryString(IntPtr textThread, ref StringBuilder str, int len) => Inner.TextThread.TextThread_GetEntryString(textThread, str, len);
-
-		[Obsolete("Use TextThread.SetEntryString")]
-		public string TextThread_GetThreadString(IntPtr textThread) => Inner.TextThread.TextThread_GetThreadString(textThread);
-
-		[Obsolete("Use TextThread.SetEntryString")]
-		public string Host_GetHookName(uint parameterPid, uint parameterHook)
-		{
-			var str = new StringBuilder(512);
-			Inner.Host.Host_GetHookName(str, parameterPid, parameterHook, 512);
-			return str.ToString();
-		}
-
-		[Obsolete("Use TextThread.SetUnicodeStatus")]
-		public bool SetTextThreadUnicodeStatus(IntPtr textThread, IntPtr processRecord, uint hook) => Inner.TextThread.SetTextThreadUnicodeStatus(textThread, processRecord, hook);
-
-		[Obsolete("Use TextThread.GetLink")]
-		public string TextThread_GetLink(IntPtr textThread)
-		{
-			var str = new StringBuilder(512);
-			Inner.TextThread.TextThread_GetLink(textThread, str, 512);
-			return str.ToString();
-		}
-		// ReSharper restore UnusedMember.Global
 		#endregion
 
 		public void Exit()
 		{
-			const int timeout = 5000;
-			var closeTask = Task.Run(Host_Close);
-			var success = closeTask.Wait(timeout);
-			if (!success) Debug.WriteLine($"Timed out during {nameof(Host_Close)}");
-			var closeSystem = Task.Run(Host_IthCloseSystemService);
-			success = closeSystem.Wait(timeout);
-			if (!success) Debug.WriteLine($"Timed out during {nameof(Host_IthCloseSystemService)}");
-			_antiGcList.Clear();
-			_antiGcDict.Clear();
+			if (_disposed) return;
+			try
+			{
+				const int timeout = 5000;
+				if (_hostOpen)
+				{
+					var closeTask = Task.Run(Host_Close);
+					var success = closeTask.Wait(timeout);
+					if (!success) Debug.WriteLine($"Timed out during {nameof(Host_Close)}");
+					_hostOpen = false;
+				}
+				_antiGcList.Clear();
+				_antiGcDict.Clear();
+				_externalDelegates.Clear();
+				WinAPI.FreeLibrary(_libraryHandle);
+				_libraryHandle = IntPtr.Zero;
+			}
+			finally
+			{
+				_disposed = true;
+			}
 		}
 
-		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
+		public void SaveObject(object obj) => _antiGcList.Add(obj); //todo may not be needed anymore
+
+		public void Dispose() => Exit();
+
+		~VNR() => Dispose();
+
+		[StructLayout(LayoutKind.Sequential)]
+		private struct InsertHookStruct
 		{
-			_antiGcList.Add(callback);
-			Inner.HookManager.HookManager_RegisterGetThreadCallback(hookManagerPointer, callback);
+			public SendParam sp;
+			public IntPtr name_buffer;
 		}
 
-		public void SaveObject(object obj)
+		[StructLayout(LayoutKind.Sequential)]
+		private struct SendParam
 		{
-			_antiGcList.Add(obj);
+			public uint type;
+			public HookParam hp;
+		}
+
+		private enum HostCommandType
+		{
+			// ReSharper disable InconsistentNaming
+			// ReSharper disable UnusedMember.Local
+			HOST_COMMAND = -1 // null type
+			, HOST_COMMAND_NEW_HOOK = 0
+			, HOST_COMMAND_REMOVE_HOOK = 1
+			, HOST_COMMAND_MODIFY_HOOK = 2
+			, HOST_COMMAND_HIJACK_PROCESS = 3
+			, HOST_COMMAND_DETACH = 4
+			// ReSharper restore InconsistentNaming
+			// ReSharper restore UnusedMember.Local
 		}
 	}
 }

@@ -82,7 +82,6 @@
     <Compile Include="ConsoleThread.cs" />
     <Compile Include="HookManagerWrapper.cs" />
     <Compile Include="HookParam.cs" />
-    <Compile Include="Injector.cs" />
     <Compile Include="IthVnrSettings.cs" />
     <Compile Include="PipeAndProcessRecordMap.cs" />
     <Compile Include="PipeWithProcessRecord.cs" />
