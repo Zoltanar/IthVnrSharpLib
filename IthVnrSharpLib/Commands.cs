@@ -10,7 +10,7 @@ namespace IthVnrSharpLib
 	{
 		private readonly HookManagerWrapper _hookManager;
 		private readonly IthVnrViewModel _viewModel;
-		private readonly VNR _vnrProxy;
+		private readonly VNR _vnrHost;
 		private Regex ProcessNameRegex { get; } = new ("/pn(.+)", RegexOptions.IgnoreCase);
 		private Regex ProcessRegex { get; } = new ("/p(.+)", RegexOptions.IgnoreCase);
 		private Regex HookRegex { get; } = new ("/h(.+)", RegexOptions.IgnoreCase);
@@ -20,11 +20,11 @@ namespace IthVnrSharpLib
 		private Regex SearchRegex { get; } = new("(:s|:search) (.+)", RegexOptions.IgnoreCase);
 		private Regex SearchAllRegex { get; } = new("(:sa|:searchall) (.+)", RegexOptions.IgnoreCase);
 
-		public Commands(VNR vnrProxy, IthVnrViewModel viewModel)
+		public Commands(IthVnrViewModel viewModel)
 		{
 			_viewModel = viewModel;
 			_hookManager = viewModel.HookManager;
-			_vnrProxy = vnrProxy;
+			_vnrHost = viewModel.VnrHost;
 		}
 
 		public void ProcessCommand(string cmd, int pid)
@@ -114,7 +114,7 @@ namespace IthVnrSharpLib
 			_hookManager.ConsoleOutput($"Parsed code to: {hp}", true);
 			var commandHandle = _viewModel.PipeAndRecordMap.GetCommandHandle(pid);
 			if (commandHandle == IntPtr.Zero) return false;
-			var result = _vnrProxy.Host_InsertHook(hookParamPointer, null, commandHandle);
+			var result = _vnrHost.Host_InsertHook(hookParamPointer, null, commandHandle);
 			return result == 0;
 		}
 
@@ -128,7 +128,7 @@ namespace IthVnrSharpLib
 			try
 			{
 				var process = System.Diagnostics.Process.GetProcessById(processId);
-				var success = _vnrProxy.Host_InjectByPID((uint)process.Id,out var errorMessage);
+				var success = _vnrHost.Host_InjectByPID((uint)process.Id,out var errorMessage);
 				_hookManager.ConsoleOutput(success ? $"Injected into {process.ProcessName} ({process.Id})" : errorMessage, true);
 			}
 			catch (Exception ex)
@@ -147,7 +147,7 @@ namespace IthVnrSharpLib
 					_hookManager.ConsoleOutput($"No processes found with name '{processName}'", true);
 					return;
 				case 1:
-					var success = _vnrProxy.Host_InjectByPID((uint)processes[0].Id, out var errorMessage);
+					var success = _vnrHost.Host_InjectByPID((uint)processes[0].Id, out var errorMessage);
 					_hookManager.ConsoleOutput(success ? $"Injected into {processes[0].ProcessName} ({processes[0].Id})" : errorMessage, true);
 					return;
 				default:

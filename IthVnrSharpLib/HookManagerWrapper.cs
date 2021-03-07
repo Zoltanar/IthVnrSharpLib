@@ -15,17 +15,6 @@ namespace IthVnrSharpLib
 	public class HookManagerWrapper : MarshalByRefObject, IDisposable, INotifyPropertyChanged
 	{
 		public override object InitializeLifetimeService() => null;
-
-		// ReSharper disable PrivateFieldCanBeConvertedToLocalVariable
-		private VNR.ThreadOutputFilterCallback _threadOutput;
-		private VNR.ThreadEventCallback _threadCreate;
-		private VNR.ProcessEventCallback _registerProcessList;
-		private VNR.ProcessEventCallback _removeProcessList;
-		private VNR.ThreadEventCallback _threadRemove;
-		private VNR.ThreadEventCallback _threadReset;
-		private VNR.UIntReturnPtr _threadTableGetThread;
-		// ReSharper restore PrivateFieldCanBeConvertedToLocalVariable
-		
 		private readonly IthVnrViewModel _viewModel;
 		public readonly VNR VnrProxy;
 		public readonly IntPtr HookManager;
@@ -109,29 +98,20 @@ namespace IthVnrSharpLib
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
 			_viewModel = propertyChangedNotifier;
 			TextThread.ViewModel = _viewModel;
-			//save callbacks so they dont get GC'd
-			_threadOutput = ThreadOutput;
-			_threadCreate = ThreadCreate;
-			_registerProcessList = RegisterProcessList;
-			_removeProcessList = RemoveProcessList;
-			_threadRemove = ThreadRemove;
-			_threadReset = ThreadReset;
 			_threadTable = threadTable;
-			//end of callback section
 			Host_GetHookManager(ref HookManager);
 			_threadTable.Initialize(this);
-			_threadTableGetThread = _threadTable.FindThread;
-			VnrProxy.ThreadTable_RegisterGetThread(HookManager, _threadTableGetThread);
-			HookManager_RegisterThreadCreateCallback(_threadCreate);
-			HookManager_RegisterThreadRemoveCallback(_threadRemove);
-			HookManager_RegisterThreadResetCallback(_threadReset);
+			VnrProxy.ThreadTable_RegisterGetThread(HookManager, _threadTable.FindThread);
+			HookManager_RegisterThreadCreateCallback(ThreadCreate);
+			HookManager_RegisterThreadRemoveCallback(ThreadRemove);
+			HookManager_RegisterThreadResetCallback(ThreadReset);
 			var console = _threadTable.FindThread(0);
 			ConsoleThread = new ConsoleThread { Id = console };
 			Threads[console] = ConsoleThread;
 			_viewModel.AddNewThreadToDisplayCollection(ConsoleThread);
-			TextThread_RegisterOutputCallBack(console, _threadOutput, IntPtr.Zero);
-			HookManager_RegisterProcessAttachCallback(_registerProcessList);
-			HookManager_RegisterProcessDetachCallback(_removeProcessList);
+			TextThread_RegisterOutputCallBack(console, ThreadOutput, IntPtr.Zero);
+			HookManager_RegisterProcessAttachCallback(RegisterProcessList);
+			HookManager_RegisterProcessDetachCallback(RemoveProcessList);
 			VnrProxy.Host_Start();
 			ConsoleOutput(StaticHelpers.VersionInfo, true);
 		}
@@ -185,7 +165,7 @@ namespace IthVnrSharpLib
 
 		private int RemoveProcessList(int pid)
 		{
-			Processes.TryRemove(pid, out _); //todo check the selected thread throughout this method, ensure it ends in something
+			Processes.TryRemove(pid, out _);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
 			var associatedThreads = Threads.Values.Where(x => x.ProcessId == pid).ToList();
 			foreach (var associatedThread in associatedThreads)
@@ -214,7 +194,7 @@ namespace IthVnrSharpLib
 		{
 			if (threadPointer != _viewModel.SelectedTextThread?.Id && IgnoreOtherThreads) return 0;
 			GetOrCreateThread(threadPointer, out var thread);
-			TextThread_RegisterOutputCallBack(threadPointer, _threadOutput, IntPtr.Zero);
+			TextThread_RegisterOutputCallBack(threadPointer, ThreadOutput, IntPtr.Zero);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			SetOptionsToNewThread(thread);
 			return 0;
@@ -331,13 +311,6 @@ namespace IthVnrSharpLib
 			HookManager_RegisterThreadResetCallback(null);
 			HookManager_RegisterProcessAttachCallback(null);
 			HookManager_RegisterProcessDetachCallback(null);
-			_threadOutput = null;
-			_threadCreate = null;
-			_registerProcessList = null;
-			_removeProcessList = null;
-			_threadRemove = null;
-			_threadReset = null;
-			_threadTableGetThread = null;
 		}
 
 		public void AddLink(uint fromThreadNumber, uint toThreadNumber)
@@ -387,7 +360,7 @@ namespace IthVnrSharpLib
 					if (firstLineWith != null) ConsoleOutput($"Found text in thread {thread.EntryString}: {firstLineWith}", true);
 				}
 			}
-			ConsoleOutput($@"Text search complete.", true);
+			ConsoleOutput(@"Text search complete.", true);
 		}
 	}
 

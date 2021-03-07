@@ -19,8 +19,7 @@ namespace IthVnrSharpLib
 	[UsedImplicitly]
 	public class VNR : MarshalByRefObject, IDisposable
 	{
-		//private const string VnrDll = "vnrhost.dll";
-		private const string VnrDll2 = "vnrhost.dll";
+		private const string VnrDllName = "vnrhost.dll";
 		private const string HookDllName = "vnrhook.dll";
 
 		private const string IthServerMutex = "VNR_SERVER";
@@ -73,7 +72,7 @@ namespace IthVnrSharpLib
 
 		public VNR()
 		{
-			_libraryHandle = WinAPI.LoadLibrary(VnrDll2);
+			_libraryHandle = WinAPI.LoadLibrary(VnrDllName);
 			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
 		}
 
@@ -145,10 +144,10 @@ namespace IthVnrSharpLib
 					errorMessage = "Mutex already existed (likely already attached to target process).";
 					return false;
 				}
-				// geting the handle of the process - with required privileges
+				// getting the handle of the process - with required privileges
 				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, (int)processId);
 				// searching for the address of LoadLibraryW and storing it in a pointer
-				var loadLibraryAddr = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
 				// name of the dll we want to inject
 				string dllName = Path.GetFullPath(HookDllName);
 				var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
@@ -159,7 +158,7 @@ namespace IthVnrSharpLib
 				// writing the name of the dll there
 				WinAPI.WriteProcessMemory(procHandle.Value, allocMemAddress.Value, dllNameBytes, dataSize, out _);
 				// creating a thread that will call LoadLibraryW with allocMemAddress as argument
-				var thread = WinAPI.CreateRemoteThread(procHandle.Value, IntPtr.Zero, 0, loadLibraryAddr, allocMemAddress.Value, 0,
+				var thread = WinAPI.CreateRemoteThread(procHandle.Value, IntPtr.Zero, 0, loadLibraryAddress, allocMemAddress.Value, 0,
 					IntPtr.Zero);
 				if (thread != IntPtr.Zero)
 				{
@@ -285,7 +284,7 @@ namespace IthVnrSharpLib
 		}
 		#endregion
 
-		public void Exit()
+		public void Dispose()
 		{
 			if (_disposed) return;
 			try
@@ -295,7 +294,7 @@ namespace IthVnrSharpLib
 				{
 					var closeTask = Task.Run(Host_Close);
 					var success = closeTask.Wait(timeout);
-					if (!success) Debug.WriteLine($"Timed out during {nameof(Host_Close)}");
+					if (!success) StaticHelpers.LogToFile($"Timed out during {nameof(Host_Close)}");
 					_hostOpen = false;
 				}
 				_antiGcList.Clear();
@@ -309,11 +308,7 @@ namespace IthVnrSharpLib
 				_disposed = true;
 			}
 		}
-
-		public void SaveObject(object obj) => _antiGcList.Add(obj); //todo may not be needed anymore
-
-		public void Dispose() => Exit();
-
+		
 		~VNR() => Dispose();
 
 		[StructLayout(LayoutKind.Sequential)]

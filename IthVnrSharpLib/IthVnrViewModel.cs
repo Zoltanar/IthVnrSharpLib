@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using IthVnrSharpLib.Properties;
@@ -38,8 +36,7 @@ namespace IthVnrSharpLib
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
 		public ProcessInfo SelectedProcess { get; set; }
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
-		public VNR VnrProxy { get; private set; }
-		public static AppDomain IthVnrDomain { get; private set; }
+		public VNR VnrHost { get; private set; }
 		public virtual bool IsPaused => false;
 		public virtual bool MergeByHookCode
 		{
@@ -94,22 +91,36 @@ namespace IthVnrSharpLib
 		/// </summary>
 		public void Initialize(TextOutputEvent updateDisplayText, out string errorMessage)
 		{
+			bool result;
 			ClearThreadDisplayCollection();
-			InitVnrProxy();
-			_updateDisplayText = updateDisplayText;
-			_threadTable = new ThreadTableWrapper();
-			_threadTableSetThread = _threadTable.SetThread;
-			PipeAndRecordMap = new PipeAndProcessRecordMap();
-			_registerPipe = PipeAndRecordMap.RegisterPipe;
-			_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
-			VnrProxy.SaveObject(_threadTable);
-			var result = VnrProxy.Host_Open2(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage);
+			try
+			{
+				VnrHost = new VNR();
+				result = true;
+				errorMessage = string.Empty;
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				errorMessage = ex.ToString();
+				result = false;
+			}
 			if (result)
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrProxy, _threadTable);
+				_updateDisplayText = updateDisplayText;
+				_threadTable = new ThreadTableWrapper();
+				_threadTableSetThread = _threadTable.SetThread;
+				PipeAndRecordMap = new PipeAndProcessRecordMap();
+				_registerPipe = PipeAndRecordMap.RegisterPipe;
+				_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
+				result = VnrHost.Host_Open2(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage);
+			}
+			if (result)
+			{
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrHost, _threadTable);
 				PipeAndRecordMap.HookManager = HookManager;
 				Application.Current.Exit += Finalize;
-				Commands = new Commands(VnrProxy, this);
+				Commands = new Commands(this);
 			}
 			if (!result)
 			{
@@ -167,10 +178,6 @@ namespace IthVnrSharpLib
 				Settings.Save();
 				SaveGameTextThreads();
 				ClearThreadDisplayCollection();
-				HookManager?.Dispose();
-				VnrProxy?.Exit();
-				VnrProxy = null;
-				if (IthVnrDomain != null) AppDomain.Unload(IthVnrDomain);
 			}
 			catch (Exception ex)
 			{
@@ -178,10 +185,12 @@ namespace IthVnrSharpLib
 			}
 			finally
 			{
+				HookManager?.Dispose();
+				VnrHost?.Dispose();
 				HookManager = null;
 				Commands = null;
 				SelectedProcess = null;
-				VnrProxy = null;
+				VnrHost = null;
 				OnPropertyChanged(nameof(SelectedProcess));
 				Finalized = true;
 				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");
@@ -191,7 +200,7 @@ namespace IthVnrSharpLib
 
 		protected virtual void SaveGameTextThreads()
 		{
-			//can be overridden to save game text threads to persistant data storage
+			//can be overridden to save game text threads to persistent data storage
 		}
 
 		public void TogglePostOtherThreads()
@@ -245,15 +254,7 @@ namespace IthVnrSharpLib
 				thread.OnPropertyChanged(nameof(thread.Text));
 			}
 		}
-
-		public void InitVnrProxy()
-		{
-			var path = Path.GetFullPath($@"{nameof(IthVnrSharpLib)}.dll");
-			var assembly = Assembly.LoadFile(path);
-			IthVnrDomain = AppDomain.CreateDomain(@"StaticMethodsIthVnrAppDomain");
-			VnrProxy = (VNR)IthVnrDomain.CreateInstanceAndUnwrap(assembly.FullName, $@"{nameof(IthVnrSharpLib)}.{nameof(VNR)}");
-		}
-
+		
 		public virtual void AddGameThread(GameTextThread gameTextThread)
 		{
 			//can be overridden to save a new game text thread to persistent data storage
