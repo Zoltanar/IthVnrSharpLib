@@ -246,7 +246,7 @@ namespace IthVnrSharpLib
 
 		private void GetOrCreateThread(IntPtr threadPointer, out TextThread thread)
 		{
-			if(!_viewModel.UserGameInitialized) _viewModel.InitializeUserGame();
+			_viewModel.InitializeUserGame();
 			if (Threads.TryGetValue(threadPointer, out thread))
 			{
 				if (thread.LinkTo != null) thread = thread.LinkTo;
