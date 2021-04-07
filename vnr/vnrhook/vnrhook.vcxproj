@@ -65,9 +65,9 @@
       <ObjectFileName>$(IntDir)</ObjectFileName>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>..\..\..\Debug\ithsys.lib;C:\WinDDK\7600.16385.1\lib\wxp\i386\ntdll.lib;Version.lib;comctl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>..\..\Debug\ithsys.lib;C:\WinDDK\7600.16385.1\lib\wxp\i386\ntdll.lib;Version.lib;comctl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
+      <AdditionalOptions>%(AdditionalOptions) /machine:X86 /verbose</AdditionalOptions>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <SubSystem>Windows</SubSystem>

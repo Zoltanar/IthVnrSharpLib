@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using IthVnrSharpLib.Engine;
 
 namespace IthVnrSharpLib
 {
@@ -27,16 +28,17 @@ namespace IthVnrSharpLib
 		private TextOutputEvent _updateDisplayText;
 		private bool _finalized;
 		protected Action _initializeUserGame;
-		private ThreadTableWrapper _threadTable;
 
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
+		public ThreadTableWrapper ThreadTable { get; protected set; }
 		public Commands Commands { get; protected set; }
 		public ObservableCollection<FrameworkElement> DisplayThreads { get; } = new();
 		public virtual TextThread SelectedTextThread { get; set; }
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
 		public ProcessInfo SelectedProcess { get; set; }
 		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
+		public EmbedHost EmbedHost { get; private set; }
 		public VNR VnrHost { get; private set; }
 		public virtual bool IsPaused => false;
 		public virtual bool MergeByHookCode
@@ -104,7 +106,9 @@ namespace IthVnrSharpLib
 			ClearThreadDisplayCollection();
 			try
 			{
+				EmbedHost = new EmbedHost();
 				VnrHost = new VNR();
+				ThreadTable = new ThreadTableWrapper();
 				result = true;
 				errorMessage = string.Empty;
 			}
@@ -117,8 +121,7 @@ namespace IthVnrSharpLib
 			if (result)
 			{
 				_updateDisplayText = updateDisplayText;
-				_threadTable = new ThreadTableWrapper();
-				_threadTableSetThread = _threadTable.SetThread;
+				_threadTableSetThread = ThreadTable.SetThread;
 				PipeAndRecordMap = new PipeAndProcessRecordMap();
 				_registerPipe = PipeAndRecordMap.RegisterPipe;
 				_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
@@ -126,7 +129,7 @@ namespace IthVnrSharpLib
 			}
 			if (result)
 			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrHost, _threadTable);
+				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrHost, ThreadTable);
 				PipeAndRecordMap.HookManager = HookManager;
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(this);

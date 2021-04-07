@@ -20,12 +20,14 @@ namespace IthVnrSharpLib
 
 	public class TextThread : INotifyPropertyChanged
 	{
+		private const string MonitorThreadName = nameof(IthVnrSharpLib) + "." + nameof(TextThread) + "." + nameof(StartMonitor);
+		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS"); 
+
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		public static Func<bool> CopyToClipboardFunc;
 		private static bool CopyToClipboard => CopyToClipboardFunc();
 		public static IthVnrViewModel ViewModel;
-		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
 		private const uint MaxHook = 64;
 
 		public bool Removed { get; set; }
@@ -54,7 +56,7 @@ namespace IthVnrSharpLib
 				if (!IsConsole) GameThread.IsPaused = _isPaused;
 				OnPropertyChanged();
 				if (_isPaused || _monitorThread != null) return;
-				_monitorThread = new Thread(StartMonitor) { IsBackground = true };
+				_monitorThread = new Thread(StartMonitor) { IsBackground = true, Name = MonitorThreadName };
 				_monitorThread.Start();
 			}
 		}
@@ -84,10 +86,10 @@ namespace IthVnrSharpLib
 			}
 		}
 
-		public string HookCode { get; private set; }
-		public string HookName { get; private set; }
-		public string HookNameless { get; private set; }
-		public string HookFull { get; private set; }
+		public string HookCode { get; protected set; }
+		public string HookName { get; protected set; }
+		public string HookNameless { get; protected set; }
+		public string HookFull { get; protected set; }
 		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new ();
 		public ConcurrentList<byte> CurrentBytes { get; } = new ();
 		public ThreadParameter Parameter { get; set; }
@@ -95,7 +97,7 @@ namespace IthVnrSharpLib
 		public virtual bool EncodingDefined { get; set; }
 		public uint ProcessId => Parameter.pid;
 		public uint Addr => Parameter.hook;
-		public uint Status
+		public virtual uint Status
 		{
 			get => VnrProxy.TextThread_GetStatus(Id);
 			set => VnrProxy.TextThread_SetStatus(Id, value);
@@ -142,7 +144,7 @@ namespace IthVnrSharpLib
 
 		public TextThread()
 		{
-			_monitorThread = new Thread(StartMonitor) { IsBackground = true };
+			_monitorThread = new Thread(StartMonitor) { IsBackground = true, Name = MonitorThreadName };
 			_monitorThread.Start();
 		}
 		

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27130.2027
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31129.286
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vnrhook", "vnr\vnrhook\vnrhook.vcxproj", "{AB7E908D-1B4F-3805-A428-BCA9BE15B420}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -23,6 +23,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "profile", "vnr\profile\profile.vcxproj", "{D9BBDDBC-8D52-315F-9100-67227D979DB1}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ithsys", "vnr\ithsys\ithsys.vcxproj", "{E1BB3EAD-602D-360C-86A6-75425F77AC91}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vnragent", "embed\vnragent\vnragent.vcxproj", "{70EF9A04-3B1D-3D1B-89C4-ED9458B6BDDF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -50,11 +52,16 @@ Global
 		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Debug|x86.Build.0 = Debug|Win32
 		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Release|x86.ActiveCfg = Release|Win32
 		{E1BB3EAD-602D-360C-86A6-75425F77AC91}.Release|x86.Build.0 = Release|Win32
+		{70EF9A04-3B1D-3D1B-89C4-ED9458B6BDDF}.Debug|x86.ActiveCfg = Debug|Win32
+		{70EF9A04-3B1D-3D1B-89C4-ED9458B6BDDF}.Debug|x86.Build.0 = Debug|Win32
+		{70EF9A04-3B1D-3D1B-89C4-ED9458B6BDDF}.Release|x86.ActiveCfg = Release|Win32
+		{70EF9A04-3B1D-3D1B-89C4-ED9458B6BDDF}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
+		Qt5Version = Qt_4.8.5
 		SolutionGuid = {F60BEB92-0DFE-49C0-9FBA-A2FBAE0EA1AE}
 	EndGlobalSection
 EndGlobal

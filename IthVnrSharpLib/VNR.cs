@@ -21,6 +21,7 @@ namespace IthVnrSharpLib
 	{
 		private const string VnrDllName = "vnrhost.dll";
 		private const string HookDllName = "vnrhook.dll";
+		private const string EmbedHookDllName = "vnragent.dll";
 
 		private const string IthServerMutex = "VNR_SERVER";
 		private const int IhsSize = 0x80;
@@ -72,11 +73,12 @@ namespace IthVnrSharpLib
 
 		public VNR()
 		{
+			if (!File.Exists(VnrDllName)) throw new FileNotFoundException("VNR Host dll not found.", VnrDllName);
 			_libraryHandle = WinAPI.LoadLibrary(VnrDllName);
 			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
 		}
-
-		private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
+		
+private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
 		{
 			Debug.Assert(functionName != null, nameof(functionName) + " != null");
 			if (!_externalDelegates.TryGetValue(functionName, out var func))
@@ -123,7 +125,7 @@ namespace IthVnrSharpLib
 
 		#region Host
 		public bool Host_HijackProcess(uint pid) => GetExternalDelegate<UIntReturnBoolDelegate>()(pid);
-		public bool Host_InjectByPID(uint processId, out string errorMessage)
+		public bool Host_InjectByPID(uint processId, out string errorMessage, bool hookEmbed = false)
 		{
 			bool result;
 			Process currentProcess = null;
@@ -149,7 +151,13 @@ namespace IthVnrSharpLib
 				// searching for the address of LoadLibraryW and storing it in a pointer
 				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
 				// name of the dll we want to inject
-				string dllName = Path.GetFullPath(HookDllName);
+				var dll = hookEmbed ? EmbedHookDllName : HookDllName;
+				string dllName = Path.GetFullPath(dll);
+				if (!File.Exists(dllName))
+				{
+					errorMessage = $"Hook DLL did not exist: '{dllName}'";
+					return false;
+				}
 				var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
 				dataSize = (uint)dllNameBytes.Length;
 				// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
@@ -165,7 +173,7 @@ namespace IthVnrSharpLib
 					var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(thread, 3000);
 					WinAPI.CloseHandle(thread);
 					result = waitResult == WinAPI.WaitReturnCode.WAIT_OBJECT_0;
-					errorMessage = result != true ? $"Failed while loading {HookDllName} library: {waitResult}" : string.Empty;
+					errorMessage = result != true ? $"Failed while loading {dll} library: {waitResult}" : string.Empty;
 				}
 				else
 				{
@@ -186,6 +194,88 @@ namespace IthVnrSharpLib
 				if(procHandle != null) WinAPI.CloseHandle(procHandle.Value);
 			}
 			return result;
+		}
+
+		public bool InjectEmbedHook(int pid,out string errorMessage)
+		{
+			string dllPath = Path.GetFullPath(EmbedHookDllName);
+			if (!File.Exists(dllPath))
+			{
+				errorMessage = $"DLL did not exist: {dllPath}";
+				return false;
+			}
+			byte[] dllNameBytes;
+			try
+			{
+				dllNameBytes = Encoding.UTF8.GetBytes(dllPath);
+			}
+			catch (Exception ex)
+			{
+				errorMessage = $"Failed to get bytes for DLL Path: {dllPath}, {ex}";
+				return false;
+			}
+			var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+			if (loadLibraryAddress == IntPtr.Zero)
+			{
+				errorMessage = "Failed to get address for LoadLibraryW from kernel32.dll";
+				return false;
+			}
+
+			var dataSize = dllPath.Length * 2 + 2; //dllNameBytes.Length
+			errorMessage = string.Empty;
+			return InjectEmbedInner(loadLibraryAddress, dllNameBytes, dataSize, pid);
+		}
+
+		private bool InjectEmbedInner(IntPtr loadLibraryAddress, byte[] dllNameBytes, int dataSize, int pid)
+		{
+			bool isLocalHandle = true;
+			IntPtr handle;
+			try
+			{
+				handle = Process.GetProcessById(pid).Handle; // win32api.OpenProcess(PROCESS_INJECT_ACCESS, 0, pid)
+				if (handle == IntPtr.Zero) /*try elevating*/ return false;
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				return false;
+			}
+			var hProcess = handle;
+			try
+			{
+				var data = dllNameBytes;
+
+				// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
+				var remoteData = WinAPI.VirtualAllocEx(hProcess, IntPtr.Zero, (uint)dataSize,
+					WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
+				if (remoteData != IntPtr.Zero)
+				{
+					IntPtr hThread = IntPtr.Zero;
+					if(WinAPI.WriteProcessMemory(hProcess, remoteData, dllNameBytes, (uint)dataSize, out _))
+					{
+
+						hThread = WinAPI.CreateRemoteThread(
+							hProcess, 
+							IntPtr.Zero, 0, 
+							loadLibraryAddress,
+							remoteData, 
+							0, IntPtr.Zero);
+						
+						if( hThread != IntPtr.Zero)
+						{
+							var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(hThread, 3000);
+							WinAPI.CloseHandle(hThread);
+							return true;
+						}
+					}
+				}
+				WinAPI.VirtualFreeEx(hProcess, remoteData, (uint) dataSize, WinAPI.AllocationType.Release);
+			}
+			catch(Exception e)
+			{
+				StaticHelpers.LogToFile(e);
+			}
+			return true;
 		}
 
 		public bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
@@ -233,9 +323,9 @@ namespace IthVnrSharpLib
 			}
 			return 0;
 		}
-		#endregion
+#endregion
 
-		#region HookManager
+#region HookManager
 		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => GetExternalDelegate<PtrAndUIntReturnPtrDelegate>()(hookManager, pid);//Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
 		public void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
@@ -268,9 +358,9 @@ namespace IthVnrSharpLib
 			GetExternalDelegate<RegisterGetThreadDelegate>("HookManager_RegisterGetThreadCallback")(hookManagerPointer, callback);
 		}
 
-		#endregion
+#endregion
 
-		#region TextThread
+#region TextThread
 
 		public IntPtr TextThread_GetThreadParameter(IntPtr textThread) => GetExternalDelegate<PtrReturnPtrDelegate>()(textThread);
 		public uint TextThread_GetStatus(IntPtr textThread) => GetExternalDelegate<PtrReturnUIntDelegate>()(textThread);
@@ -282,7 +372,7 @@ namespace IthVnrSharpLib
 			else _antiGcDict[textThread] = callback;
 			GetExternalDelegate<RegisterOutputDelegate>()(textThread, callback, data);
 		}
-		#endregion
+#endregion
 
 		public void Dispose()
 		{

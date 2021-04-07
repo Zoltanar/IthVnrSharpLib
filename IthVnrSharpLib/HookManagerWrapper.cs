@@ -201,7 +201,7 @@ namespace IthVnrSharpLib
 			return 0;
 		}
 
-		private void SetOptionsToNewThread(TextThread thread)
+		public void SetOptionsToNewThread(TextThread thread)
 		{
 			var savedThread =
 				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull,thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
@@ -282,7 +282,7 @@ namespace IthVnrSharpLib
 			Threads[threadPointer] = thread;
 		}
 
-		private int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
+		public int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
 		{
 			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			GetOrCreateThread(threadPointer, out var thread);
