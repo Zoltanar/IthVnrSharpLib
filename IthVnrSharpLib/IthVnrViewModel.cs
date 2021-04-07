@@ -26,6 +26,7 @@ namespace IthVnrSharpLib
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private TextOutputEvent _updateDisplayText;
 		private bool _finalized;
+		protected Action _initializeUserGame;
 		private ThreadTableWrapper _threadTable;
 
 		public event PropertyChangedEventHandler PropertyChanged;
@@ -70,6 +71,14 @@ namespace IthVnrSharpLib
 		}
 
 		public PipeAndProcessRecordMap PipeAndRecordMap { get; set; }
+		public bool UserGameInitialized { get; set; }
+
+		public void InitializeUserGame()
+		{
+			if (UserGameInitialized) return;
+			_initializeUserGame?.Invoke();
+			UserGameInitialized = true;
+		}
 
 		public IthVnrViewModel()
 		{

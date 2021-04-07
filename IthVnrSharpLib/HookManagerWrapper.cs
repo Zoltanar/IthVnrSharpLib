@@ -175,6 +175,7 @@ namespace IthVnrSharpLib
 			}
 			_viewModel.PipeAndRecordMap.RemoveProcess(pid);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
+			_viewModel.UserGameInitialized = false;
 			return 0;
 		}
 
@@ -245,6 +246,7 @@ namespace IthVnrSharpLib
 
 		private void GetOrCreateThread(IntPtr threadPointer, out TextThread thread)
 		{
+			if(!_viewModel.UserGameInitialized) _viewModel.InitializeUserGame();
 			if (Threads.TryGetValue(threadPointer, out thread))
 			{
 				if (thread.LinkTo != null) thread = thread.LinkTo;
