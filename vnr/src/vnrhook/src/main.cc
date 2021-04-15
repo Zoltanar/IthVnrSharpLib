@@ -172,14 +172,13 @@ BOOL WINAPI DllMain(HINSTANCE hModule, DWORD fdwReason, LPVOID lpReserved)
   switch (fdwReason) {
   case DLL_PROCESS_ATTACH:
     {
-	  MessageBox(nullptr, L"Paused to let you attach debugger", L"Paused VNRHOOK", 0x00000000L);
       static bool attached_ = false;
       if (attached_) // already attached
         return TRUE;
       attached_ = true;
 
       LdrDisableThreadCalloutsForDll(hModule);
-
+      //MessageBox(nullptr, L"Paused to let you attach debugger", L"Paused VNRHOOK", 0x00000000L);
       //IthBreak();
       ::module_base = (DWORD)hModule;
 

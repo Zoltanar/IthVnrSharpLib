@@ -27,7 +27,7 @@ namespace IthVnrSharpLib
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private TextOutputEvent _updateDisplayText;
 		private bool _finalized;
-		protected Action _initializeUserGame;
+		protected Action InitializeUserGameAction;
 
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
@@ -78,7 +78,7 @@ namespace IthVnrSharpLib
 		public void InitializeUserGame()
 		{
 			if (UserGameInitialized) return;
-			_initializeUserGame?.Invoke();
+			InitializeUserGameAction?.Invoke();
 			UserGameInitialized = true;
 		}
 
@@ -106,7 +106,7 @@ namespace IthVnrSharpLib
 			ClearThreadDisplayCollection();
 			try
 			{
-				EmbedHost = new EmbedHost();
+				EmbedHost = new EmbedHost(this);
 				VnrHost = new VNR();
 				ThreadTable = new ThreadTableWrapper();
 				result = true;
@@ -134,7 +134,7 @@ namespace IthVnrSharpLib
 				Application.Current.Exit += Finalize;
 				Commands = new Commands(this);
 			}
-			if (!result)
+			else
 			{
 				Finalize(null, null);
 				Finalized = true;
@@ -199,10 +199,12 @@ namespace IthVnrSharpLib
 			{
 				HookManager?.Dispose();
 				VnrHost?.Dispose();
+				EmbedHost?.Dispose();
 				HookManager = null;
 				Commands = null;
 				SelectedProcess = null;
 				VnrHost = null;
+				EmbedHost = null;
 				OnPropertyChanged(nameof(SelectedProcess));
 				Finalized = true;
 				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");

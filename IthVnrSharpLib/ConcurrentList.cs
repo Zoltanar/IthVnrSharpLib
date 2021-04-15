@@ -7,8 +7,8 @@ namespace IthVnrSharpLib
 {
 	public abstract class ConcurrentListBase<T>
 	{
-		public object SyncRoot { get; } = new object();
-		protected readonly List<T> Items = new List<T>();
+		public object SyncRoot { get; } = new();
+		protected readonly List<T> Items = new();
 
 		public int Count
 		{

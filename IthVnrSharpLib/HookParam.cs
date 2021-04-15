@@ -153,9 +153,9 @@ namespace IthVnrSharpLib
 				// ":GDI.dll:strlen" -> MODULE_OFFSET | FUNCTION_OFFSET && module != NULL && function != NULL
 				// ":GDI.dll:#123"   -> MODULE_OFFSET | FUNCTION_OFFSET && module != NULL && function != NULL
 				string module = @"([^:;]+)";
-				string name = @"[^:;]+";
-				string ordinal = "\\d+";
-				rx = new Regex($"^:({module}(:{name}|#{ordinal})?)?$", RegexOptions.IgnoreCase);
+				const string nameRegexPart = @"[^:;]+";
+				const string ordinalRegexPart = "\\d+";
+				rx = new Regex($"^:({module}(:{nameRegexPart}|#{ordinalRegexPart})?)?$", RegexOptions.IgnoreCase);
 				m1 = rx.Matches(start);
 				result = m1.Count != 0;
 				if (result) // :[module[:{name|#ordinal}]]

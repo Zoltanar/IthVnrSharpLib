@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using IthVnrSharpLib.Engine;
 using IthVnrSharpLib.Properties;
 using Microsoft.Win32.SafeHandles;
 
@@ -19,10 +20,13 @@ namespace IthVnrSharpLib
 	[UsedImplicitly]
 	public class VNR : MarshalByRefObject, IDisposable
 	{
-		private const string VnrDllName = "vnrhost.dll";
-		private const string HookDllName = "vnrhook.dll";
-		private const string EmbedHookDllName = "vnragent.dll";
-
+		private const string VnrHostDllName = "vnrhost.dll";
+		public static readonly string[] HookDlls =
+		{
+			//"msvcr100.dll", // depends on kernel
+			//"msvcp100.dll", // depends on msvcr
+			"vnrhook.dll"
+		};
 		private const string IthServerMutex = "VNR_SERVER";
 		private const int IhsSize = 0x80;
 
@@ -35,6 +39,7 @@ namespace IthVnrSharpLib
 			{ typeof(int), 4 },
 			{ typeof(uint), 4 },
 		};
+		private readonly int _ownProcessId;
 
 		private bool _hostOpen;
 		private bool _disposed;
@@ -73,25 +78,26 @@ namespace IthVnrSharpLib
 
 		public VNR()
 		{
-			if (!File.Exists(VnrDllName)) throw new FileNotFoundException("VNR Host dll not found.", VnrDllName);
-			_libraryHandle = WinAPI.LoadLibrary(VnrDllName);
+			var currentProcess = Process.GetCurrentProcess();
+			_ownProcessId = currentProcess.Id;
+			currentProcess.Dispose();
+			if (!File.Exists(VnrHostDllName)) throw new FileNotFoundException("VNR Host dll not found.", VnrHostDllName);
+			_libraryHandle = WinAPI.LoadLibrary(VnrHostDllName);
 			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
 		}
-		
-private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
+
+		private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
 		{
 			Debug.Assert(functionName != null, nameof(functionName) + " != null");
-			if (!_externalDelegates.TryGetValue(functionName, out var func))
-			{
-				var numArgs = GetBytesForArgs(typeof(T));
-				var funcName = $"_{functionName}@{numArgs}";
-				var functionPointer = WinAPI.GetProcAddress(_libraryHandle, funcName);
-				if (functionPointer == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
-				func = _externalDelegates[functionName] = Marshal.GetDelegateForFunctionPointer(functionPointer, typeof(T));
-			}
+			if (_externalDelegates.TryGetValue(functionName, out var func)) return (T) func;
+			var numArgs = GetBytesForArgs(typeof(T));
+			var funcName = $"_{functionName}@{numArgs}";
+			var functionPointer = WinAPI.GetProcAddress(_libraryHandle, funcName);
+			if (functionPointer == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+			func = _externalDelegates[functionName] = Marshal.GetDelegateForFunctionPointer(functionPointer, typeof(T));
 			return (T)func;
 		}
-		
+
 		private static int GetBytesForArgs(Type type)
 		{
 			int total = 0;
@@ -104,7 +110,6 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 				{
 					var paramType = param.ParameterType;
 					var size = paramType.IsByRef ? 4 : TypeSizes.FirstOrDefault(t => paramType == t.Key || paramType.IsSubclassOf(t.Key)).Value;
-					if(size <= 0) { }
 					total += size;
 				}
 				return total;
@@ -115,7 +120,7 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 				return -1;
 			}
 		}
-		
+
 		private static SafeWaitHandle IthCreateMutex(string name, bool initialOwner, out bool exist)
 		{
 			var ret = new Mutex(initialOwner, name, out var createdNew);
@@ -125,61 +130,26 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 
 		#region Host
 		public bool Host_HijackProcess(uint pid) => GetExternalDelegate<UIntReturnBoolDelegate>()(pid);
-		public bool Host_InjectByPID(uint processId, out string errorMessage, bool hookEmbed = false)
+		public bool Host_InjectByPID(uint processId, out string errorMessage, bool hookEmbed)
 		{
 			bool result;
-			Process currentProcess = null;
-			IntPtr? procHandle = null;
-			IntPtr? allocMemAddress = null;
-			uint dataSize = 0;
 			try
 			{
-				currentProcess = Process.GetCurrentProcess();
-				if (currentProcess.Id == processId)
+				if (_ownProcessId == processId)
 				{
 					errorMessage = "Attempt to inject into own process denied.";
 					return false;
 				}
-				bool newlyAttached = GetExternalDelegate<UIntReturnBoolDelegate>("Host_HandleCreateMutex")(processId);
+				bool newlyAttached = hookEmbed || GetExternalDelegate<UIntReturnBoolDelegate>("Host_HandleCreateMutex")(processId);
 				if (!newlyAttached)
 				{
 					errorMessage = "Mutex already existed (likely already attached to target process).";
 					return false;
 				}
 				// getting the handle of the process - with required privileges
-				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, (int)processId);
 				// searching for the address of LoadLibraryW and storing it in a pointer
-				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
-				// name of the dll we want to inject
-				var dll = hookEmbed ? EmbedHookDllName : HookDllName;
-				string dllName = Path.GetFullPath(dll);
-				if (!File.Exists(dllName))
-				{
-					errorMessage = $"Hook DLL did not exist: '{dllName}'";
-					return false;
-				}
-				var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
-				dataSize = (uint)dllNameBytes.Length;
-				// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
-				allocMemAddress = WinAPI.VirtualAllocEx(procHandle.Value, IntPtr.Zero, dataSize,
-					WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
-				// writing the name of the dll there
-				WinAPI.WriteProcessMemory(procHandle.Value, allocMemAddress.Value, dllNameBytes, dataSize, out _);
-				// creating a thread that will call LoadLibraryW with allocMemAddress as argument
-				var thread = WinAPI.CreateRemoteThread(procHandle.Value, IntPtr.Zero, 0, loadLibraryAddress, allocMemAddress.Value, 0,
-					IntPtr.Zero);
-				if (thread != IntPtr.Zero)
-				{
-					var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(thread, 3000);
-					WinAPI.CloseHandle(thread);
-					result = waitResult == WinAPI.WaitReturnCode.WAIT_OBJECT_0;
-					errorMessage = result != true ? $"Failed while loading {dll} library: {waitResult}" : string.Empty;
-				}
-				else
-				{
-					result = false;
-					errorMessage = "Failed to create thread to load library.";
-				}
+				result = InjectDlls((int) processId, hookEmbed ? EmbedHost.AgentDlls : HookDlls, out errorMessage);
+				//result = InjectOld(procHandle, hookEmbed, out errorMessage);
 			}
 			catch (Exception ex)
 			{
@@ -187,95 +157,71 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 				errorMessage = $"Failed to inject: {ex}";
 				result = false;
 			}
-			finally
-			{
-				currentProcess?.Dispose();
-				if(allocMemAddress != null) WinAPI.VirtualFreeEx(procHandle.Value, allocMemAddress.Value, dataSize, WinAPI.AllocationType.Release);
-				if(procHandle != null) WinAPI.CloseHandle(procHandle.Value);
-			}
 			return result;
 		}
-
-		public bool InjectEmbedHook(int pid,out string errorMessage)
+		
+		private static bool InjectDlls(int processId, string[] dlls, out string errorMessage)
 		{
-			string dllPath = Path.GetFullPath(EmbedHookDllName);
-			if (!File.Exists(dllPath))
-			{
-				errorMessage = $"DLL did not exist: {dllPath}";
-				return false;
-			}
-			byte[] dllNameBytes;
-			try
-			{
-				dllNameBytes = Encoding.UTF8.GetBytes(dllPath);
-			}
-			catch (Exception ex)
-			{
-				errorMessage = $"Failed to get bytes for DLL Path: {dllPath}, {ex}";
-				return false;
-			}
-			var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
-			if (loadLibraryAddress == IntPtr.Zero)
-			{
-				errorMessage = "Failed to get address for LoadLibraryW from kernel32.dll";
-				return false;
-			}
-
-			var dataSize = dllPath.Length * 2 + 2; //dllNameBytes.Length
 			errorMessage = string.Empty;
-			return InjectEmbedInner(loadLibraryAddress, dllNameBytes, dataSize, pid);
-		}
-
-		private bool InjectEmbedInner(IntPtr loadLibraryAddress, byte[] dllNameBytes, int dataSize, int pid)
-		{
-			bool isLocalHandle = true;
-			IntPtr handle;
+			var memoryHandles = new List<(IntPtr handle, uint size)>();
+			var procHandle = IntPtr.Zero;
 			try
 			{
-				handle = Process.GetProcessById(pid).Handle; // win32api.OpenProcess(PROCESS_INJECT_ACCESS, 0, pid)
-				if (handle == IntPtr.Zero) /*try elevating*/ return false;
-			}
-			catch (Exception ex)
-			{
-				StaticHelpers.LogToFile(ex);
-				return false;
-			}
-			var hProcess = handle;
-			try
-			{
-				var data = dllNameBytes;
-
-				// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
-				var remoteData = WinAPI.VirtualAllocEx(hProcess, IntPtr.Zero, (uint)dataSize,
-					WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
-				if (remoteData != IntPtr.Zero)
+				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, processId);
+				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+				foreach (var dll in dlls)
 				{
-					IntPtr hThread = IntPtr.Zero;
-					if(WinAPI.WriteProcessMemory(hProcess, remoteData, dllNameBytes, (uint)dataSize, out _))
-					{
-
-						hThread = WinAPI.CreateRemoteThread(
-							hProcess, 
-							IntPtr.Zero, 0, 
-							loadLibraryAddress,
-							remoteData, 
-							0, IntPtr.Zero);
-						
-						if( hThread != IntPtr.Zero)
-						{
-							var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(hThread, 3000);
-							WinAPI.CloseHandle(hThread);
-							return true;
-						}
-					}
+					var result = InjectDll(procHandle, out errorMessage, dll, loadLibraryAddress, out var dataSize, out var allocMemAddress);
+					StaticHelpers.LogToDebug($"{nameof(InjectDll)} ({processId},'{dll}'):{result}");
+					memoryHandles.Add((allocMemAddress, dataSize));
+					if (!result) return false;
 				}
-				WinAPI.VirtualFreeEx(hProcess, remoteData, (uint) dataSize, WinAPI.AllocationType.Release);
 			}
-			catch(Exception e)
+			finally
 			{
-				StaticHelpers.LogToFile(e);
+				foreach (var (handle, size) in memoryHandles.AsEnumerable().Reverse())
+				{
+					if (handle != IntPtr.Zero) WinAPI.VirtualFreeEx(procHandle, handle, size, WinAPI.AllocationType.Release);
+				}
+				if(procHandle != IntPtr.Zero) WinAPI.CloseHandle(procHandle);
 			}
 			return true;
+		}
+
+		private static bool InjectDll(IntPtr procHandle, out string errorMessage, string dll, IntPtr loadLibraryAddress,
+			out uint dataSize, out IntPtr allocMemAddress)
+		{
+			dataSize = 0;
+			allocMemAddress = IntPtr.Zero;
+			string dllName = Path.GetFullPath(dll);
+			if (!File.Exists(dllName))
+			{
+				dllName = Path.GetFullPath(Path.GetFileNameWithoutExtension(dll) + "d" + Path.GetExtension(dll));
+				if (!File.Exists(dllName))
+				{
+					errorMessage = $"DLL did not exist: '{dllName}'";
+					return false;
+				}
+			}
+			var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
+			dataSize = (uint)dllNameBytes.Length;
+			// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
+			allocMemAddress = WinAPI.VirtualAllocEx(procHandle, IntPtr.Zero, dataSize,
+				WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
+			// writing the name of the dll there
+			WinAPI.WriteProcessMemory(procHandle, allocMemAddress, dllNameBytes, dataSize, out _);
+			// creating a thread that will call LoadLibraryW with allocMemAddress as argument
+			var thread = WinAPI.CreateRemoteThread(procHandle, IntPtr.Zero, 0, loadLibraryAddress, allocMemAddress, 0, IntPtr.Zero);
+			if (thread == IntPtr.Zero)
+			{
+				errorMessage = "Failed to create thread to load library.";
+				return false;
+			}
+			var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(thread, 3000);
+			WinAPI.CloseHandle(thread);
+			var result = waitResult == WinAPI.WaitReturnCode.WAIT_OBJECT_0;
+			errorMessage = result != true ? $"Failed while loading {dll} library (timed out?): {waitResult}" : string.Empty;
+			return result;
 		}
 
 		public bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
@@ -323,9 +269,9 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 			}
 			return 0;
 		}
-#endregion
+		#endregion
 
-#region HookManager
+		#region HookManager
 		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => GetExternalDelegate<PtrAndUIntReturnPtrDelegate>()(hookManager, pid);//Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
 		public void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
@@ -358,9 +304,9 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 			GetExternalDelegate<RegisterGetThreadDelegate>("HookManager_RegisterGetThreadCallback")(hookManagerPointer, callback);
 		}
 
-#endregion
+		#endregion
 
-#region TextThread
+		#region TextThread
 
 		public IntPtr TextThread_GetThreadParameter(IntPtr textThread) => GetExternalDelegate<PtrReturnPtrDelegate>()(textThread);
 		public uint TextThread_GetStatus(IntPtr textThread) => GetExternalDelegate<PtrReturnUIntDelegate>()(textThread);
@@ -372,7 +318,7 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 			else _antiGcDict[textThread] = callback;
 			GetExternalDelegate<RegisterOutputDelegate>()(textThread, callback, data);
 		}
-#endregion
+		#endregion
 
 		public void Dispose()
 		{
@@ -398,7 +344,7 @@ private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) 
 				_disposed = true;
 			}
 		}
-		
+
 		~VNR() => Dispose();
 
 		[StructLayout(LayoutKind.Sequential)]

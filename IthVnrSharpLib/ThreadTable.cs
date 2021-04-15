@@ -37,11 +37,11 @@ namespace IthVnrSharpLib
 			}
 			_textThreadMap[num] = textThreadPointer;
 		}
-
-		public void SetThread(uint num, TextThread textThread)
+		
+		public void CreateThread(TextThread textThread)
 		{
 			Map[textThread.Id] = textThread;
-			_textThreadMap[num] = textThread.Id;
+			_textThreadMap[(uint) _textThreadMap.Count] = textThread.Id;
 		}
 
 		public void Dispose()

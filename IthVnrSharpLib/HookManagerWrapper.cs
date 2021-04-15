@@ -16,12 +16,12 @@ namespace IthVnrSharpLib
 	{
 		public override object InitializeLifetimeService() => null;
 		private readonly IthVnrViewModel _viewModel;
-		public readonly VNR VnrProxy;
-		public readonly IntPtr HookManager;
+		private readonly VNR VnrProxy;
+		private readonly IntPtr HookManager;
 		private readonly ThreadTableWrapper _threadTable;
+		private readonly ConsoleThread ConsoleThread;
 
 		private bool _mergeByHookCode;
-		public readonly ConsoleThread ConsoleThread;
 		public ConcurrentDictionary<IntPtr, TextThread> Threads => _threadTable.Map;
 		public ConcurrentDictionary<int, ProcessInfo> Processes { get; } = new();
 		public bool Paused { get; set; }
@@ -163,7 +163,7 @@ namespace IthVnrSharpLib
 			return 0;
 		}
 
-		private int RemoveProcessList(int pid)
+		public int RemoveProcessList(int pid)
 		{
 			Processes.TryRemove(pid, out _);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
@@ -237,6 +237,7 @@ namespace IthVnrSharpLib
 		public void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
+			thread.ProcessId = (int)thread.Parameter.pid;
 			var pr = VnrProxy.HookManager_GetProcessRecord(HookManager, thread.Parameter.pid);
 			thread.ProcessRecordPtr = pr;
 			thread.SetUnicodeStatus(pr, thread.Parameter.hook);

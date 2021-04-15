@@ -8,11 +8,9 @@ namespace IthVnrSharpLib
 {
 	public static class StaticHelpers
 	{
-		public const string LibraryName = nameof(IthVnrSharpLib);
-		public const string BuildDate = "20 - Feb - 2018";
-		public const string LibVersion = "1.0.0";
-		public const string VnrDllVersion = "3.5640.1-modified";
-		public const string VersionInfo = LibraryName + " " + LibVersion + " (VNR DLL: " + VnrDllVersion + ") " + BuildDate;
+		private const string BuildDate = "15 - Apr - 2021";
+		private const string LibVersion = "1.1.0";
+		public static readonly string VersionInfo = $"{nameof(IthVnrSharpLib)} {LibVersion} (VNR DLLs Forked from 3.5640.1) {BuildDate}";
 
 		static StaticHelpers()
 		{
@@ -39,7 +37,8 @@ namespace IthVnrSharpLib
 				if (counter > 5) return;//throw new IOException("Logfile is locked!");
 				Thread.Sleep(25);
 			}
-			using (var writer = new StreamWriter(LogFile, true)) writer.WriteLine(message);
+			using var writer = new StreamWriter(LogFile, true);
+			writer.WriteLine(message);
 		}
 
 		[Conditional("DEBUG")]
@@ -65,12 +64,10 @@ namespace IthVnrSharpLib
 				if (counter > 5) return;//throw new IOException("Logfile is locked!");
 				Thread.Sleep(25);
 			}
-			using (var writer = new StreamWriter(LogFile, true))
-			{
-				writer.WriteLine($"Source: {source}");
-				writer.WriteLine(exception.Message);
-				writer.WriteLine(exception.StackTrace);
-			}
+			using var writer = new StreamWriter(LogFile, true);
+			writer.WriteLine($"Source: {source}");
+			writer.WriteLine(exception.Message);
+			writer.WriteLine(exception.StackTrace);
 		}
 
 		/// <summary>

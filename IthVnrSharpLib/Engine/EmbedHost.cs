@@ -14,23 +14,41 @@ namespace IthVnrSharpLib.Engine
 
 		private const string PipeHostThreadName = nameof(IthVnrSharpLib) + "." + nameof(Engine) + "." + nameof(EmbedHost) + "." + nameof(ServerThread);
 
-		private NamedPipeServerStream _pipeServer;
-		private Thread _listeningThread;
-		private IthVnrViewModel _mainViewModel;
-		private HookManagerWrapper _hookManager;
-		private ThreadTableWrapper _threadTable;
-		private readonly Dictionary<(int signature, int role), EmbedTextThread> _textThreads = new();
-		private readonly HashSet<int> _processesConnected = new();
-		public bool Initialized { get; private set; }
-
-
+		public static readonly string[] AgentDlls =
+		{
+			// ReSharper disable StringLiteralTypo
+			// ReSharper disable CommentTypo
+			//msvcr100.dll", // depends on kernel
+			//"msvcp100.dll", // depends on msvcr
+#if DEBUG
+"Qt5Cored.dll", // depends on msvcr, msvcp
+"Qt5Networkd.dll", //depends on qtcore
+"Qt5Guid.dll", //depends on qtcore
+#else
+"Qt5Core.dll", // depends on msvcr, msvcp
+"Qt5Network.dll", //depends on qtcore
+"Qt5Gui.dll", //depends on qtcore
+#endif
+			"vnragent.dll"
+			// ReSharper restore CommentTypo
+			// ReSharper restore StringLiteralTypo
+		};
 
 		private string _engineName = "Unset";
-		public void Initialize(IthVnrViewModel mainViewModel, HookManagerWrapper hookManager, ThreadTableWrapper threadTable)
+		private NamedPipeServerStream _pipeServer;
+		private Thread _listeningThread;
+		private readonly IthVnrViewModel _mainViewModel;
+		public bool Initialized { get; private set; }
+		private int? _connectedProcessId;
+
+		public EmbedHost(IthVnrViewModel mainViewModel)
 		{
 			_mainViewModel = mainViewModel;
-			_hookManager = hookManager;
-			_threadTable = threadTable;
+		}
+
+		public void Initialize()
+		{
+			StaticHelpers.LogToDebug($"{nameof(IthVnrSharpLib)}.{nameof(EmbedHost)}.{nameof(Initialize)}");
 			try
 			{
 				_pipeServer = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances);
@@ -44,7 +62,7 @@ namespace IthVnrSharpLib.Engine
 			Initialized = true;
 		}
 
-		public bool SendSettings(int pid)
+		public bool SendSettings()
 		{
 			if (!_pipeServer.IsConnected) return false;
 			try
@@ -59,27 +77,6 @@ namespace IthVnrSharpLib.Engine
 				StaticHelpers.LogToFile(ex);
 				return false;
 			}
-		}
-
-		public static void Try2()
-		{
-			try
-			{
-				var pipeClient = new NamedPipeClientStream(".", PipeName);
-				pipeClient.Connect();
-				var instances = pipeClient.NumberOfServerInstances;
-				if (instances <= 0) return;
-				var data = GetDataBytes("settings", new EmbedSettings() { embeddedTextEnabled = true });
-				//var dataBytes = Encoding.UTF8.GetBytes(data);
-				var allBytes = BitConverter.GetBytes(data.Length).Reverse().Concat(data).ToArray();
-				pipeClient.Write(allBytes, 0, allBytes.Length);
-				pipeClient.Dispose();
-			}
-			catch (Exception ex)
-			{
-				StaticHelpers.LogToFile(ex);
-			}
-			return;
 		}
 
 		private static byte[] GetDataBytes(params object[] data)
@@ -107,48 +104,11 @@ namespace IthVnrSharpLib.Engine
 			return new[] { (byte)byte1, (byte)byte2, (byte)byte3, (byte)byte4 };
 		}
 
-
 		private static uint UnpackUInt32(byte[] data, int index)
 		{
 			var uint32 = BitConverter.ToUInt32(new[] { data[index + 3], data[index + 2], data[index + 1], data[index] }, 0);
 			return uint32;
 		}
-
-		public class EmbedSettings
-		{
-			public bool embeddedScenarioTranscodingEnabled { get; set; }
-			public bool embeddedFontCharSetEnabled { get; set; } = true;
-			public int embeddedTranslationWaitTime { get; set; } = 2000;
-			public bool embeddedOtherTranscodingEnabled { get; set; }
-			public string embeddedSpacePolicyEncoding { get; set; } = string.Empty;
-			public bool windowTranslationEnabled { get; set; }
-			public bool windowTextVisible { get; set; } = true;
-			public bool embeddedNameTranscodingEnabled { get; set; }
-			public string gameEncoding { get; set; } //= "shift-jis";
-			public bool embeddedOtherTranslationEnabled { get; set; }
-			public bool embeddedSpaceSmartInserted { get; set; }
-			public int embeddedFontCharSet { get; set; } = 0;
-			public int embeddedScenarioWidth { get; set; } = 0;
-			public bool embeddedScenarioTextVisible { get; set; } = true;
-			public bool windowTranscodingEnabled { get; set; }
-			public int nameSignature { get; set; } = 0;
-			public bool embeddedScenarioTranslationEnabled { get; set; }
-			public bool embeddedScenarioVisible { get; set; } = true;
-			public int embeddedFontScale { get; set; }
-			public bool embeddedAllTextsExtracted { get; set; }
-			public bool embeddedOtherVisible { get; set; } = true;
-			public string embeddedFontFamily { get; set; }
-			public bool embeddedTextEnabled { get; set; } = true;
-			public int scenarioSignature { get; set; } //=30661;
-			public bool embeddedOtherTextVisible { get; set; } = true;
-			public bool embeddedNameTextVisible { get; set; } = true;
-			public bool embeddedSpaceAlwaysInserted { get; set; }
-			public bool embeddedNameTranslationEnabled { get; set; }
-			public bool debug { get; set; } //=true;
-			public bool embeddedNameVisible { get; set; } = true;
-			public int embeddedFontWeight { get; set; } = 0;
-		}
-
 
 		private static uint ReadUInt32(byte[] data, ref int index)
 		{
@@ -171,7 +131,6 @@ namespace IthVnrSharpLib.Engine
 				_pipeServer.WaitForConnection();
 				do
 				{
-					//if (_closePipeServer) return;
 					var uintBuffer = new byte[sizeof(uint)];
 					var readBytes = _pipeServer.Read(uintBuffer, 0, uintBuffer.Length);
 					if (readBytes < uintBuffer.Length) return;
@@ -180,8 +139,8 @@ namespace IthVnrSharpLib.Engine
 					var messageBytes = new byte[messageSize];
 					readBytes = _pipeServer.Read(messageBytes, 0, messageBytes.Length);
 					if (readBytes < messageBytes.Length) return;
-					/*Task.Run(() => */
-					ProcessMessage(messageBytes) /*)*/;
+					//process synchronously because response may be required, assumption is only one client is connected at any time
+					ProcessMessage(messageBytes);
 				} while (true);
 			}
 			catch (Exception ex)
@@ -191,6 +150,11 @@ namespace IthVnrSharpLib.Engine
 			finally
 			{
 				Initialized = false;
+				if (_connectedProcessId.HasValue)
+				{
+					_mainViewModel.HookManager.RemoveProcessList(_connectedProcessId.Value);
+					_connectedProcessId = null;
+				}
 			}
 		}
 
@@ -214,23 +178,11 @@ namespace IthVnrSharpLib.Engine
 					args.Add(arg);
 				}
 				ProcessMessage(args.First(), args.Skip(1).ToList());
-				//ProcessArgs(args);
 			}
 			catch (Exception ex)
 			{
 				StaticHelpers.LogToFile(ex);
 			}
-		}
-
-		/// <summary>
-		/// String Enum Class
-		/// </summary>
-		private static class MessageType
-		{
-			internal const string Ping = @"agent.ping";
-			internal const string Settings = @"settings";
-			internal const string EngineName = @"agent.engine.name";
-			internal const string EngineText = @"agent.engine.text";
 		}
 
 		private void ProcessMessage(string messageType, List<string> arguments)
@@ -242,8 +194,8 @@ namespace IthVnrSharpLib.Engine
 					case MessageType.Ping:
 						var pid = int.Parse(arguments.First());
 						StaticHelpers.LogToDebug($"Embed Host pinged by process : {pid}");
-						var added = _processesConnected.Add(pid);
-						if (added) SendSettings(pid);
+						_connectedProcessId = pid;
+						SendSettings();
 						break;
 					case MessageType.Settings:
 						break;
@@ -272,18 +224,26 @@ namespace IthVnrSharpLib.Engine
 
 		private void ProcessEngineText(List<string> arguments)
 		{
-			if (_hookManager == null) return;
-			var text = arguments.First();
-			var threadKey = (int.Parse(arguments[2]), int.Parse(arguments[3]));
-			if (!_textThreads.TryGetValue(threadKey, out var textThread))
+			if (_mainViewModel.HookManager == null) return;
+			if (!_connectedProcessId.HasValue) return;
+			EngineText message;
+			try
 			{
-				textThread = new EmbedTextThread(threadKey, _engineName);
-				_textThreads[threadKey] = textThread;
-				_threadTable.SetThread((uint)textThread.Id, textThread);
-				_mainViewModel.AddNewThreadToDisplayCollection(textThread);
-				_hookManager.SetOptionsToNewThread(textThread);
+				message = new EngineText(arguments);
 			}
-			_hookManager.ThreadOutput(textThread.Id, Encoding.Unicode.GetBytes(text), text.Length, false, IntPtr.Zero, false);
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				return;
+			}
+			if (!_mainViewModel.ThreadTable.Map.TryGetValue(message.Signature, out var textThread))
+			{
+				textThread = new EmbedTextThread(message, _engineName, _connectedProcessId.Value);
+				_mainViewModel.ThreadTable.CreateThread(textThread);
+				_mainViewModel.AddNewThreadToDisplayCollection(textThread);
+				_mainViewModel.HookManager.SetOptionsToNewThread(textThread);
+			}
+			_mainViewModel.HookManager.ThreadOutput(textThread.Id, Encoding.Unicode.GetBytes(message.Text), message.Text.Length, false, IntPtr.Zero, false);
 		}
 
 		public void Dispose()
@@ -301,39 +261,34 @@ namespace IthVnrSharpLib.Engine
 				_pipeServer?.Dispose();
 			}
 		}
+
+		/// <summary>
+		/// String Enum Class
+		/// </summary>
+		private static class MessageType
+		{
+			internal const string Ping = @"agent.ping";
+			internal const string Settings = @"settings";
+			internal const string EngineName = @"agent.engine.name";
+			internal const string EngineText = @"agent.engine.text";
+		}
 	}
 
-
-	internal class EmbedTextThread : TextThread
+	internal readonly struct EngineText
 	{
-		/// <summary>
-		/// Embed Threads start here and go backwards.
-		/// </summary>
-		private static IntPtr TextThreadPointer = IntPtr.Subtract(IntPtr.Zero, 2);
-
-		internal enum TextRole
-		{
-			UnknownRole = 0,
-			ScenarioRole,
-			NameRole,
-			OtherRole,
-			ChoiceRole = OtherRole,
-			HistoryRole = OtherRole
-		};
-
+		public string Text { get; }
+		public string Hash { get; }
+		public IntPtr Signature { get; }
 		public TextRole Role { get; }
-		public override uint Status
-		{
-			get => 1;
-			set => throw new NotSupportedException();
-		}
+		public bool NeedsTranslation { get; }
 
-		public EmbedTextThread((int signature, int role) key, string engineName)
+		public EngineText(List<string> arguments)
 		{
-			var (signature, role) = key;
-			Role = (TextRole)role;
-			HookCode = HookNameless = HookFull = ThreadString = $"{engineName} ({signature:X}, {Role})";
-			Id = IntPtr.Subtract(TextThreadPointer, (int)Role);
+			Text = arguments[0];
+			Hash = arguments[1];
+			Signature = (IntPtr)uint.Parse(arguments[2]);
+			Role = (TextRole)int.Parse(arguments[3]);
+			NeedsTranslation = arguments[4] != "0";
 		}
 	}
 }

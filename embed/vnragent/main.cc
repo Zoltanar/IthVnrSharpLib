@@ -57,16 +57,15 @@ BOOL WINAPI DllMain(_In_ HINSTANCE hInstance, _In_ DWORD fdwReason, _In_ LPVOID 
 {
   CC_UNUSED(lpvReserved);
   switch (fdwReason) {
-  case DLL_PROCESS_ATTACH:
+  case DLL_PROCESS_ATTACH:    
     if (!WinSingleMutex::acquire("vnragent"))
       //growl::error("already injected");
-      return FALSE;
-
+      return FALSE;    
     ::DisableThreadLibraryCalls(hInstance); // Disable DLL_THREAD_ATTACH and DLL_THREAD_DETACH notifications
+    //MessageBox(nullptr, L"Paused to let you attach debugger", L"Paused VNRAGENT", 0x00000000L);
 
 #ifdef VNRAGENT_ENABLE_THREAD
     suppressExistingThreadsPriories_();
-    MessageBox(nullptr, L"Paused to let you attach debugger", L"Paused VNRAGENT", 0x00000000L);
     if (HANDLE h = ::CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)Loader::initWithInstance, hInstance, 0, nullptr)) {
       // This is critical to make sure that the socket communication is delivered
       ::SetThreadPriority(h, THREAD_PRIORITY_HIGHEST|THREAD_PRIORITY_TIME_CRITICAL);

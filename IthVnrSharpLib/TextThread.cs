@@ -20,16 +20,18 @@ namespace IthVnrSharpLib
 
 	public class TextThread : INotifyPropertyChanged
 	{
-		private const string MonitorThreadName = nameof(IthVnrSharpLib) + "." + nameof(TextThread) + "." + nameof(StartMonitor);
-		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS"); 
-
+		private const uint MaxHook = 64;
+		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
+		private static readonly object TimerTickLock = new();
+		private static bool CopyToClipboard => CopyToClipboardFunc();
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		public static Func<bool> CopyToClipboardFunc;
-		private static bool CopyToClipboard => CopyToClipboardFunc();
 		public static IthVnrViewModel ViewModel;
-		private const uint MaxHook = 64;
+		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
 
+		private string MonitorThreadName => $"{nameof(IthVnrSharpLib)}.{nameof(TextThread)}.{nameof(StartMonitor)}:{Id}";
+		public ConcurrentArrayList<byte> Bytes { get; } = new(300, 200);
 		public bool Removed { get; set; }
 		public IntPtr Id { get; set; }
 		public virtual bool IsConsole { get; set; }
@@ -43,7 +45,7 @@ namespace IthVnrSharpLib
 				_isDisplay = value;
 				OnPropertyChanged();
 				if (!IsConsole) GameThread.IsDisplay = _isDisplay;
-			} 
+			}
 		}
 
 		public virtual bool IsPaused
@@ -73,15 +75,13 @@ namespace IthVnrSharpLib
 			}
 		}
 
-		public ConcurrentArrayList<byte> Bytes { get; } = new (300, 200);
-
 		public virtual Encoding PrefEncoding
 		{
 			get => _prefEncoding;
 			set
 			{
 				_prefEncoding = value;
-				if (!IsConsole) GameThread.Encoding = value.WebName;
+				if (!IsConsole && GameThread != null) GameThread.Encoding = value.WebName;
 				OnPropertyChanged();
 			}
 		}
@@ -90,12 +90,12 @@ namespace IthVnrSharpLib
 		public string HookName { get; protected set; }
 		public string HookNameless { get; protected set; }
 		public string HookFull { get; protected set; }
-		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new ();
-		public ConcurrentList<byte> CurrentBytes { get; } = new ();
+		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new();
+		public ConcurrentList<byte> CurrentBytes { get; } = new();
 		public ThreadParameter Parameter { get; set; }
 		public string EntryString => ThreadString == null ? null : $"{ThreadString}({HookCode})";
 		public virtual bool EncodingDefined { get; set; }
-		public uint ProcessId => Parameter.pid;
+		public int ProcessId { get; set; }
 		public uint Addr => Parameter.hook;
 		public virtual uint Status
 		{
@@ -120,25 +120,22 @@ namespace IthVnrSharpLib
 			lock (Bytes.SyncRoot)
 			{
 				result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(x => PrefEncoding.GetString(x)))
-				         + Environment.NewLine + curString;
+								 + Environment.NewLine + curString;
 			}
 			return result;
 		}
 
 		public TextThread LinkTo { get; set; }
 		public IntPtr ProcessRecordPtr { get; set; }
-
-		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
 		public GameTextThread GameThread { get; set; }
 
-		private static readonly object TimerTickLock = new ();
 		private Timer _timer;
 		private DateTime _lastUpdateTime = DateTime.MinValue;
 		private byte[] _lastUpdateBytes;
 		private Thread _monitorThread;
 		private bool _isPosting;
 		private bool _isPaused;
-		private readonly Dictionary<DateTime, int> _monitorPairs = new ();
+		private readonly Dictionary<DateTime, int> _monitorPairs = new();
 		private bool _isDisplay = true;
 		private Encoding _prefEncoding = Encoding.Unicode;
 
@@ -147,15 +144,15 @@ namespace IthVnrSharpLib
 			_monitorThread = new Thread(StartMonitor) { IsBackground = true, Name = MonitorThreadName };
 			_monitorThread.Start();
 		}
-		
+
 		public void SetUnicodeStatus(IntPtr processRecord, uint hook)
 		{
 			//VnrProxy.SetTextThreadUnicodeStatus(Id, processRecord, hook);
 			SetTextThreadUnicodeStatus(Marshal.PtrToStructure<ProcessRecord>(processRecord), hook);
 		}
 
-		public override string ToString() => EntryString != null ? 
-			$"{(IsPaused ? "[Paused]" : string.Empty)}{(IsPosting ? "[Posting]" : string.Empty)}{EntryString}" : 
+		public override string ToString() => EntryString != null ?
+			$"{(IsPaused ? "[Paused]" : string.Empty)}{(IsPosting ? "[Posting]" : string.Empty)}{EntryString}" :
 			$"[{Id}] EntryString hasn't been set";
 
 		public void StartTimer()
@@ -283,14 +280,17 @@ namespace IthVnrSharpLib
 					PrefEncoding = encoding.GetBest();
 					return;
 				}
+				const string fontsFolder = @"C:\Windows\Fonts\"; //todo make editable
+				const string cjkFontName = @"MS Mincho"; //todo make editable
 				ICollection<FontFamily> fontFamilies = Fonts.GetFontFamilies(@"C:\Windows\Fonts\");
-				var msMincho = fontFamilies.FirstOrDefault(x => x.Source.EndsWith("MS Mincho"));
+				var cjkFont = fontFamilies.FirstOrDefault(x => x.Source.EndsWith(cjkFontName));
+				if (cjkFont == null) throw new InvalidOperationException($"Font '{cjkFontName}' is required but not found in '{fontsFolder}'");
 				if (encoding.IsUtf16 != false)
 				{
 					foreach (var t in utf16)
 					{
 						var supportedFamilies = FontFamiliesSupportingChar(fontFamilies, t);
-						if (supportedFamilies.Contains(msMincho)) continue;
+						if (supportedFamilies.Contains(cjkFont)) continue;
 						encoding.IsUtf16 = false;
 						break;
 					}
@@ -300,11 +300,9 @@ namespace IthVnrSharpLib
 					foreach (var c in utf8)
 					{
 						var supportedFamilies = FontFamiliesSupportingChar(fontFamilies, c);
-						if (!supportedFamilies.Contains(msMincho))
-						{
-							encoding.IsUtf8 = false;
-							break;
-						}
+						if (supportedFamilies.Contains(cjkFont)) continue;
+						encoding.IsUtf8 = false;
+						break;
 					}
 				}
 
@@ -313,7 +311,7 @@ namespace IthVnrSharpLib
 					foreach (var c in sjis)
 					{
 						var supportedFamilies = FontFamiliesSupportingChar(fontFamilies, c);
-						if (supportedFamilies.Contains(msMincho)) continue;
+						if (supportedFamilies.Contains(cjkFont)) continue;
 						encoding.IsSJis = false;
 						break;
 					}
@@ -451,10 +449,10 @@ namespace IthVnrSharpLib
 			return res;
 		}
 
-		private unsafe bool GetHookParam(uint pid, uint hookAddr, out HookParam hp)
+		private unsafe bool GetHookParam(out HookParam hp)
 		{
 			hp = new HookParam();
-			if (pid == 0) return false;
+			if (ProcessId == 0) return false;
 			if (ProcessRecordPtr == IntPtr.Zero) return false;
 			var processRecord = Marshal.PtrToStructure<ProcessRecord>(ProcessRecordPtr);
 			bool result = false;
@@ -464,7 +462,7 @@ namespace IthVnrSharpLib
 				var newPtr = IntPtr.Add(processRecord.hookman_map, i * sizeof(Hook));
 				var hook = Marshal.PtrToStructure<Hook>(newPtr);
 				var hookAddress = hook.Address();
-				if (hookAddress != hookAddr) continue;
+				if (hookAddress != Addr) continue;
 				hp = hook.hp;
 				result = true;
 				break;
@@ -477,10 +475,10 @@ namespace IthVnrSharpLib
 		{
 			if (LinkTo != null) return $"->{LinkTo.Number}";
 			if (ProcessId == 0) return "ConsoleOutput";
-			return GetHookParam(ProcessId, Addr, out HookParam hp) ? GetCode(hp, ProcessId) : null;
+			return GetHookParam(out var hp) ? GetCode(hp) : null;
 		}
 
-		private string GetCode(HookParam hp, uint pid)
+		private string GetCode(HookParam hp)
 		{
 			string code = "/H";
 			char c;
@@ -518,7 +516,7 @@ namespace IthVnrSharpLib
 				if (hp.split_index >> 31 != 0) code += "*-" + ToHexString(-hp.split_index);
 				else code += "*" + ToHexString(hp.split_index);
 			}
-			if (pid != 0)
+			if (ProcessId != 0)
 			{
 				IntPtr allocationBase = GetAllocationBase(new IntPtr(hp.address));
 				if (allocationBase != IntPtr.Zero)

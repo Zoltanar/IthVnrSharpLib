@@ -18,7 +18,7 @@ namespace IthVnrSharpLib
         public IntPtr hookman_mutex;
         public IntPtr hookman_section;
         public IntPtr hookman_map;
-    };
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct ThreadParameter
@@ -27,7 +27,7 @@ namespace IthVnrSharpLib
         public uint hook;
         public uint retn; // jichi 5/11/2014: The return address of the hook
         public uint spl;  // jichi 5/11/2014: the processed split value of the hook parameter
-    };
+    }
 
 	internal enum HookParamType : ulong
     {
@@ -50,7 +50,7 @@ namespace IthVnrSharpLib
         RELATIVE_SPLIT = 0x2000, // jichi 10/24/2014: relative split return address
         HOOK_ENGINE = 0x4000,
         HOOK_ADDITIONAL = 0x8000,
-    };
+    }
 
 	[StructLayout(LayoutKind.Sequential, Size = 128)]
 	public unsafe struct Hook
@@ -65,5 +65,5 @@ namespace IthVnrSharpLib
 		public ushort Length() { return hp.hook_len; }
 		public string Name() { return Marshal.PtrToStringAuto(hook_name, name_length); }
 		public int NameLength() { return name_length; }
-	};
+	}
 }

@@ -4,6 +4,7 @@ namespace IthVnrSharpLib
 {
 	public class GameTextThread
 	{
+		// ReSharper disable AutoPropertyCanBeMadeGetOnly.Global Object created by Entity Framework
 		public long Id { get; set; }
 		public long GameId { get; set; }
 		public bool IsDisplay { get; set; } 
@@ -13,6 +14,7 @@ namespace IthVnrSharpLib
 		public string HookNameless { get; set; }
 		public string HookFull { get; set; }
 		public string Encoding { get; set; }
+		// ReSharper restore AutoPropertyCanBeMadeGetOnly.Global
 
 		[UsedImplicitly]
 		public GameTextThread()
