@@ -682,17 +682,26 @@ void HookManager::DispatchText(DWORD pid, const BYTE *text, DWORD hook, DWORD re
   //EnterCriticalSection(&hmcs);
   TextThread *it;
   //`try {
-    if (TreeNode<ThreadParameter *,DWORD> *in = Search(&tp)) {
+    if (TreeNode<ThreadParameter *,DWORD> *in = Search(&tp))
+    {
       DWORD number = in->data;
       it = thread_table->FindThread(number);
-    } else if (IsFull()) { // jichi 1/16/2015: Skip adding threads when full
+    } 
+    // jichi 1/16/2015: Skip adding threads when full
+    else if (IsFull()) 
+    { 
       static bool once = true; // output only once
-      if (once) {
+      if (once) 
+      {
         once = false;
         DOUT("so many new threads, skip");
+        ConsoleOutput("Maximum thread number reached, not creating any more.");
       }
       return;
-    } else { // New thread
+    } 
+    // New thread
+    else
+    { 
       Insert(&tp, new_thread_number);
       it = new TextThread(pid, hook, retn, spl, new_thread_number);
       RegisterThread(it, new_thread_number);
@@ -708,8 +717,7 @@ void HookManager::DispatchText(DWORD pid, const BYTE *text, DWORD hook, DWORD re
       }
       DOUT(entstr);
       while (thread_table->FindThread(++new_thread_number));
-      if (create)
-        create(it);
+      if (create) create(it);
     }
     if (it) it->AddText(text, len, false, space); // jichi 10/27/2013: new line is false
     //LeaveCriticalSection(&hmcs);

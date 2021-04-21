@@ -127,9 +127,10 @@ namespace IthVnrSharpLib
 
 		private void AttachWithProcessId(string cmd, bool hookAgent)
 		{
-			if (!int.TryParse(cmd.Substring(hookAgent ? 3 : 2), out var processId))
+			var pidString = cmd.Substring(hookAgent ? 3 : 2).Trim();
+			if (!int.TryParse(pidString, out var processId))
 			{
-				_hookManager.ConsoleOutput($"Failed to parse '{cmd.Substring(3)}'.", true);
+				_hookManager.ConsoleOutput($"Failed to parse '{pidString}'.", true);
 				return;
 			}
 			Process process = null;
@@ -152,7 +153,7 @@ namespace IthVnrSharpLib
 
 		private void AttachWithProcessName(string cmd, bool hookAgent)
 		{
-			var processName = cmd.Substring(hookAgent ? 4 : 3);
+			var processName = cmd.Substring(hookAgent ? 4 : 3).Trim();
 			var processes = Process.GetProcessesByName(processName);
 			try
 			{

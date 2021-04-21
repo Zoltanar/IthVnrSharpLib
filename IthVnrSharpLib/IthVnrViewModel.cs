@@ -254,7 +254,7 @@ namespace IthVnrSharpLib
 		{
 			var thread = SelectedTextThread;
 			if (thread == null) return;
-			thread.Bytes.Clear();
+			thread.Clear(false);
 			thread.OnPropertyChanged(nameof(thread.Text));
 		}
 
@@ -264,7 +264,7 @@ namespace IthVnrSharpLib
 			foreach (var thread in HookManager.Threads.Values)
 			{
 				if (thread == selected) continue;
-				thread.Bytes.Clear();
+				thread.Clear(false);
 				thread.OnPropertyChanged(nameof(thread.Text));
 			}
 		}

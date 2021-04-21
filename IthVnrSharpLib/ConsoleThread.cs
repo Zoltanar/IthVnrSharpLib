@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
+using System.Timers;
 
 namespace IthVnrSharpLib
 {
@@ -17,11 +19,33 @@ namespace IthVnrSharpLib
 		{
 			ThreadString = "Console";
 		}
-
-		public void AddText(string text)
+		
+		public override void Clear(bool _)
 		{
+			_textBuffer.Clear();
+		}
+
+		public override void AddText(object value)
+		{
+			var text = value as string ?? (value is byte[] bArray
+				? Encoding.Unicode.GetString(bArray)
+				: throw new NotSupportedException($"Text as object of type {value.GetType()} is not supported by {nameof(ConsoleThread)}"));
 			_textBuffer.Append(text);
 			_textBuffer.AppendLine();
 		}
+
+		protected override void OnTimerEnd(object sender, ElapsedEventArgs _)
+		{
+			try
+			{
+				//ignore
+			}
+			finally
+			{
+				Timer?.Close();
+				Timer = null;
+			}
+		}
+
 	}
 }

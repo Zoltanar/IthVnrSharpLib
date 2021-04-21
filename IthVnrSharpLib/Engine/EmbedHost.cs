@@ -243,7 +243,7 @@ namespace IthVnrSharpLib.Engine
 				_mainViewModel.AddNewThreadToDisplayCollection(textThread);
 				_mainViewModel.HookManager.SetOptionsToNewThread(textThread);
 			}
-			_mainViewModel.HookManager.ThreadOutput(textThread.Id, Encoding.Unicode.GetBytes(message.Text), message.Text.Length, false, IntPtr.Zero, false);
+			_mainViewModel.HookManager.AddTextToThread(textThread.Id, message.Text, message.Text.Length, false);
 		}
 
 		public void Dispose()

@@ -31,7 +31,7 @@ namespace IthVnrSharpLib
 		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
 
 		private string MonitorThreadName => $"{nameof(IthVnrSharpLib)}.{nameof(TextThread)}.{nameof(StartMonitor)}:{Id}";
-		public ConcurrentArrayList<byte> Bytes { get; } = new(300, 200);
+		private ConcurrentArrayList<byte> Bytes { get; } = new(300, 200);
 		public bool Removed { get; set; }
 		public IntPtr Id { get; set; }
 		public virtual bool IsConsole { get; set; }
@@ -55,7 +55,7 @@ namespace IthVnrSharpLib
 			{
 				if (_isPaused == value) return;
 				_isPaused = value;
-				if (!IsConsole) GameThread.IsPaused = _isPaused;
+				if (!IsConsole && GameThread != null) GameThread.IsPaused = _isPaused;
 				OnPropertyChanged();
 				if (_isPaused || _monitorThread != null) return;
 				_monitorThread = new Thread(StartMonitor) { IsBackground = true, Name = MonitorThreadName };
@@ -70,7 +70,7 @@ namespace IthVnrSharpLib
 			{
 				_isPosting = value;
 				if (!IsConsole) GameThread.IsPosting = _isPosting;
-				if (_isPosting) CloseByteSection(this, null);
+				if (_isPosting) OnTimerEnd(this, null);
 				OnPropertyChanged();
 			}
 		}
@@ -91,13 +91,13 @@ namespace IthVnrSharpLib
 		public string HookNameless { get; protected set; }
 		public string HookFull { get; protected set; }
 		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new();
-		public ConcurrentList<byte> CurrentBytes { get; } = new();
+		private ConcurrentList<byte> CurrentBytes { get; } = new();
 		public ThreadParameter Parameter { get; set; }
 		public string EntryString => ThreadString == null ? null : $"{ThreadString}({HookCode})";
 		public virtual bool EncodingDefined { get; set; }
 		public int ProcessId { get; set; }
 		public uint Addr => Parameter.hook;
-		public virtual uint Status
+		protected virtual uint Status
 		{
 			get => VnrProxy.TextThread_GetStatus(Id);
 			set => VnrProxy.TextThread_SetStatus(Id, value);
@@ -129,7 +129,7 @@ namespace IthVnrSharpLib
 		public IntPtr ProcessRecordPtr { get; set; }
 		public GameTextThread GameThread { get; set; }
 
-		private Timer _timer;
+		protected Timer Timer;
 		private DateTime _lastUpdateTime = DateTime.MinValue;
 		private byte[] _lastUpdateBytes;
 		private Thread _monitorThread;
@@ -159,18 +159,18 @@ namespace IthVnrSharpLib
 		{
 			lock (TimerTickLock)
 			{
-				if (_timer == null)
+				if (Timer == null)
 				{
-					_timer = new Timer
+					Timer = new Timer
 					{
 						AutoReset = false,
 						Enabled = true,
 						Interval = 100 //todo make this a setting (splitting interval)
 					};
-					_timer.Elapsed += CloseByteSection;
+					Timer.Elapsed += OnTimerEnd;
 				}
-				_timer.Stop();
-				_timer.Start();
+				Timer.Stop();
+				Timer.Start();
 			}
 		}
 
@@ -180,7 +180,7 @@ namespace IthVnrSharpLib
 			HookName = GetHookName(Parameter.pid, Parameter.hook);
 			HookNameless = $"0x{Parameter.hook:X}:0x{Parameter.retn:X}:0x{Parameter.spl:X}";
 			HookFull = $"{HookNameless}:{HookName}";
-			ThreadString = $"{Number:X4}:{Parameter.pid}:{HookFull}";
+			ThreadString = $"{Number:0000}:{Parameter.pid}:{HookFull}";
 			HookCode = GetLink();
 		}
 
@@ -216,7 +216,7 @@ namespace IthVnrSharpLib
 			UpdateDisplay(this, new TextOutputEventArgs(this, text, "Internal", false));
 		}
 
-		public void CloseByteSection(object sender, ElapsedEventArgs e)
+		protected virtual void OnTimerEnd(object sender, ElapsedEventArgs e)
 		{
 			try
 			{
@@ -237,8 +237,8 @@ namespace IthVnrSharpLib
 			}
 			finally
 			{
-				_timer?.Close();
-				_timer = null;
+				Timer?.Close();
+				Timer = null;
 			}
 		}
 
@@ -432,7 +432,7 @@ namespace IthVnrSharpLib
 			if (IsUnicodeHook(processRecord, hook) != 0) Status |= (uint)HookParamType.USING_UNICODE;
 		}
 
-		private unsafe uint IsUnicodeHook(ProcessRecord processRecord, uint hookAddr)
+		private static unsafe uint IsUnicodeHook(ProcessRecord processRecord, uint hookAddr)
 		{
 			uint res = 0;
 			WinAPI.WaitForSingleObject(processRecord.hookman_mutex, 0);
@@ -607,6 +607,18 @@ namespace IthVnrSharpLib
 		public void OnPropertyChanged([CallerMemberName] string propertyName = null)
 		{
 			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+		}
+
+		public virtual void Clear(bool clearCurrent)
+		{
+			if(clearCurrent) CurrentBytes.Clear();
+			Bytes.Clear();
+		}
+
+		public virtual void AddText(object value)
+		{
+			if (value is not byte[] bytes) throw new NotSupportedException();
+			CurrentBytes.AddRange(bytes);
 		}
 	}
 

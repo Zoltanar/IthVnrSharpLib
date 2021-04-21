@@ -136,7 +136,7 @@ namespace IthVnrSharpLib
 		private void HookManager_RegisterThreadCreateCallback(VNR.ThreadEventCallback threadCreate) => VnrProxy.HookManager_RegisterThreadCreateCallback(HookManager, threadCreate);
 		private void HookManager_RegisterThreadRemoveCallback(VNR.ThreadEventCallback threadRemove) => VnrProxy.HookManager_RegisterThreadRemoveCallback(HookManager, threadRemove);
 		private void HookManager_RegisterThreadResetCallback(VNR.ThreadEventCallback threadReset) => VnrProxy.HookManager_RegisterThreadResetCallback(HookManager, threadReset);
-		
+
 		private void TextThread_RegisterOutputCallBack(IntPtr textThread, VNR.ThreadOutputFilterCallback callback, IntPtr data) => VnrProxy.TextThread_RegisterOutputCallBack(textThread, callback, data);
 		private void Host_GetHookManager(ref IntPtr hookManager) => VnrProxy.Host_GetHookManager(ref hookManager);
 
@@ -144,8 +144,7 @@ namespace IthVnrSharpLib
 		{
 			if (Paused) return 0;
 			GetOrCreateThread(threadPointer, out TextThread thread);
-			thread.Bytes.Clear();
-			thread.CurrentBytes.Clear();
+			thread.Clear(false);
 			return 0;
 		}
 
@@ -204,7 +203,7 @@ namespace IthVnrSharpLib
 		public void SetOptionsToNewThread(TextThread thread)
 		{
 			var savedThread =
-				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull,thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
+				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookFull, thread.HookFull, StringComparison.OrdinalIgnoreCase)) ??
 				_viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.HookNameless, thread.HookNameless, StringComparison.OrdinalIgnoreCase));
 			if (savedThread != null)
 			{
@@ -230,10 +229,10 @@ namespace IthVnrSharpLib
 			_viewModel.AddGameThread(gameTextThread);
 			thread.SetEncoding(_viewModel.PrefEncoding);
 			thread.IsPosting = ShowLatestThread;
-			if(thread.IsPosting && !Paused) UpdateDisplayThread(thread);
+			if (thread.IsPosting && !Paused) UpdateDisplayThread(thread);
 			ConsoleOutput($"Found new thread '{thread.HookFull}': {gameTextThread.Options}", true);
 		}
-		
+
 		public void InitThread(TextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
@@ -283,30 +282,28 @@ namespace IthVnrSharpLib
 			Threads[threadPointer] = thread;
 		}
 
-		public int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
+
+		public int AddTextToThread(IntPtr threadPointer, object textObject, int len, bool newLine)
 		{
 			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			GetOrCreateThread(threadPointer, out var thread);
-			if (!ShowLatestThread && (thread.Status == 0 || thread.IsPaused || IgnoreOtherThreads && !thread.IsDisplay)) return len;
+			if (!ShowLatestThread && (thread.IsPaused || (IgnoreOtherThreads && !thread.IsDisplay))) return len;
 			if (newLine) return len;
-			if (thread.IsPosting || thread.IsDisplay)
-			{
-				thread.CurrentBytes.AddRange(value);
-				thread.StartTimer();
-			}
-			else thread.CurrentBytes.AddRange(value);
+			thread.AddText(textObject);
+			if (thread.IsPosting || thread.IsDisplay) thread.StartTimer();
 			if (ShowLatestThread) thread.IsDisplay = true;
 			UpdateDisplayThread(thread);
 			return len;
 		}
 
+		private int ThreadOutput(IntPtr threadPointer, byte[] value, int len, bool newLine, IntPtr data, bool space)
+		{
+			return AddTextToThread(threadPointer, value, len, newLine);
+		}
+
 		public void Dispose()
 		{
-			foreach (var textThread in Threads)
-			{
-				textThread.Value.CurrentBytes.Clear();
-				textThread.Value.Bytes.Clear();
-			}
+			foreach (var textThread in Threads) textThread.Value.Clear(true);
 			Threads.Clear();
 			_viewModel.ClearThreadDisplayCollection();
 			HookManager_RegisterThreadCreateCallback(null);
@@ -344,7 +341,7 @@ namespace IthVnrSharpLib
 
 		public void FindThreadWithText(string searchTerm, bool searchAllEncodings)
 		{
-			foreach (var thread in Threads.Values.OrderBy(t=>t.Number))
+			foreach (var thread in Threads.Values.OrderBy(t => t.Number))
 			{
 				if (thread.IsConsole) continue;
 				if (searchAllEncodings)
