@@ -25,23 +25,21 @@ namespace IthVnrSharpLib
 			return IntPtr.Zero;
 		}
 
-		public void SetThread(uint num, IntPtr textThreadPointer)
+		public void SetHookThread(uint num, IntPtr textThreadPointer)
 		{
-			if (_textThreadMap.ContainsKey(num)) { }
-
 			if (!Map.TryGetValue(textThreadPointer, out _))
 			{
-				var thread = new TextThread { Id = textThreadPointer };
-				_hookManager?.InitThread(thread);
+				var thread = new HookTextThread(textThreadPointer);
+				_hookManager?.InitHookThread(thread);
 				Map[textThreadPointer] = thread;
 			}
 			_textThreadMap[num] = textThreadPointer;
 		}
-		
+
 		public void CreateThread(TextThread textThread)
 		{
 			Map[textThread.Id] = textThread;
-			_textThreadMap[(uint) _textThreadMap.Count] = textThread.Id;
+			_textThreadMap[(uint)_textThreadMap.Count] = textThread.Id;
 		}
 
 		public void Dispose()

@@ -121,7 +121,7 @@ namespace IthVnrSharpLib
 			if (result)
 			{
 				_updateDisplayText = updateDisplayText;
-				_threadTableSetThread = ThreadTable.SetThread;
+				_threadTableSetThread = ThreadTable.SetHookThread;
 				PipeAndRecordMap = new PipeAndProcessRecordMap();
 				_registerPipe = PipeAndRecordMap.RegisterPipe;
 				_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
@@ -166,7 +166,7 @@ namespace IthVnrSharpLib
 		{
 			Application.Current.Dispatcher.Invoke(() =>
 			{
-				var displayThread = new TextBlock(new Run(textThread.EntryString)) { Tag = textThread };
+				var displayThread = new TextBlock(new Run(textThread.DisplayName)) { Tag = textThread };
 				DisplayThreads.Add(displayThread);
 			});
 		}

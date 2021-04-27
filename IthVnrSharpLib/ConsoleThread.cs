@@ -6,23 +6,45 @@ namespace IthVnrSharpLib
 {
 	public class ConsoleThread : TextThread
 	{
-		public override bool IsConsole => true;
-		public override bool IsPaused { get; set; } =false;
-		public override bool IsPosting { get; set; } = false;
-		public override bool EncodingDefined => true;
-		public override Encoding PrefEncoding { get; set; } = Encoding.Unicode;
-		private readonly StringBuilder _textBuffer = new (1000);
-		public override string Text => _textBuffer.ToString();
-		public override string ToString() => "Console";
+		private const string Name = @"Console";
+		public override object MergeProperty => null;
+		public override string PersistentIdentifier { get; } = Name;
 
-		public ConsoleThread()
+		public override bool IsPaused
 		{
-			ThreadString = "Console";
+			get => false;
+			set {/*ignore*/ }
 		}
-		
+
+		public override bool IsPosting { get; set; } = false;
+		private readonly StringBuilder _textBuffer = new(1000);
+		public override string Text => _textBuffer.ToString();
+		public override Encoding PrefEncoding
+		{
+			get => Encoding.Unicode;
+			set => throw new NotSupportedException();
+		}
+		public override bool EncodingCanChange { get; } = false;
+		public override string ToString() => Name;
+
+		public ConsoleThread(IntPtr id) : base(id)
+		{
+			DisplayName = Name;
+		}
+
 		public override void Clear(bool _)
 		{
 			_textBuffer.Clear();
+		}
+
+		protected override int GetCharacterCount()
+		{
+			return _textBuffer.Length;
+		}
+
+		public override string SearchForText(string searchTerm, bool searchAllEncodings)
+		{
+			return null;
 		}
 
 		public override void AddText(object value)
@@ -30,21 +52,14 @@ namespace IthVnrSharpLib
 			var text = value as string ?? (value is byte[] bArray
 				? Encoding.Unicode.GetString(bArray)
 				: throw new NotSupportedException($"Text as object of type {value.GetType()} is not supported by {nameof(ConsoleThread)}"));
-			_textBuffer.Append(text);
-			_textBuffer.AppendLine();
+			_textBuffer.AppendLine(text);
 		}
 
 		protected override void OnTimerEnd(object sender, ElapsedEventArgs _)
 		{
-			try
-			{
-				//ignore
-			}
-			finally
-			{
-				Timer?.Close();
-				Timer = null;
-			}
+			Timer?.Close();
+			Timer = null;
+			if (IsDisplay) OnPropertyChanged(nameof(Text));
 		}
 
 	}

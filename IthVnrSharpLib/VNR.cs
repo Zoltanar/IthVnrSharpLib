@@ -61,12 +61,14 @@ namespace IthVnrSharpLib
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void SetThreadCallback(uint num, IntPtr textThreadPointer);
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate uint RegisterPipeCallback(IntPtr text, IntPtr cmd, IntPtr thread);
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate uint RegisterProcessRecordCallback(IntPtr processRecord, bool success);
+		[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void ConsoleCallback([MarshalAs(UnmanagedType.LPStr)] string text);
 		private delegate int RefPtrReturnIntDelegate(ref IntPtr pointerRef);
 		private delegate bool HostOpenDelegate(SetThreadCallback setThread, RegisterPipeCallback registerPipe, RegisterProcessRecordCallback registerProcessRecord);
 		private delegate IntPtr RegisterGetThreadDelegate(IntPtr threadTable, GetThreadCallback data);
 		private delegate uint RegisterThreadEventDelegate(IntPtr hookManagerPointer, ThreadEventCallback cb);
 		private delegate void RegisterOutputDelegate(IntPtr textThread, ThreadOutputFilterCallback cb, IntPtr data);
 		private delegate void RegisterProcessEventDelegate(IntPtr hookManager, ProcessEventCallback cb);
+		private delegate void RegisterConsoleCallbackDelegate(IntPtr hookManager, ConsoleCallback cb);
 		private delegate bool ReturnBoolDelegate();
 		private delegate bool UIntReturnBoolDelegate(uint dword);
 		private delegate IntPtr PtrAndUIntReturnPtrDelegate(IntPtr ptr, uint dword);
@@ -89,7 +91,7 @@ namespace IthVnrSharpLib
 		private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
 		{
 			Debug.Assert(functionName != null, nameof(functionName) + " != null");
-			if (_externalDelegates.TryGetValue(functionName, out var func)) return (T) func;
+			if (_externalDelegates.TryGetValue(functionName, out var func)) return (T)func;
 			var numArgs = GetBytesForArgs(typeof(T));
 			var funcName = $"_{functionName}@{numArgs}";
 			var functionPointer = WinAPI.GetProcAddress(_libraryHandle, funcName);
@@ -148,7 +150,7 @@ namespace IthVnrSharpLib
 				}
 				// getting the handle of the process - with required privileges
 				// searching for the address of LoadLibraryW and storing it in a pointer
-				result = InjectDlls((int) processId, hookEmbed ? EmbedHost.AgentDlls : HookDlls, out errorMessage);
+				result = InjectDlls((int)processId, hookEmbed ? EmbedHost.AgentDlls : HookDlls, out errorMessage);
 				//result = InjectOld(procHandle, hookEmbed, out errorMessage);
 			}
 			catch (Exception ex)
@@ -159,7 +161,7 @@ namespace IthVnrSharpLib
 			}
 			return result;
 		}
-		
+
 		private static bool InjectDlls(int processId, string[] dlls, out string errorMessage)
 		{
 			errorMessage = string.Empty;
@@ -183,7 +185,7 @@ namespace IthVnrSharpLib
 				{
 					if (handle != IntPtr.Zero) WinAPI.VirtualFreeEx(procHandle, handle, size, WinAPI.AllocationType.Release);
 				}
-				if(procHandle != IntPtr.Zero) WinAPI.CloseHandle(procHandle);
+				if (procHandle != IntPtr.Zero) WinAPI.CloseHandle(procHandle);
 			}
 			return true;
 		}
@@ -297,6 +299,11 @@ namespace IthVnrSharpLib
 		{
 			_antiGcList.Add(callback);
 			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
+		}
+		public void HookManager_RegisterConsoleCallback(IntPtr hookManager, ConsoleCallback callback)
+		{
+			_antiGcList.Add(callback);
+			GetExternalDelegate<RegisterConsoleCallbackDelegate>()(hookManager, callback);
 		}
 		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
 		{
