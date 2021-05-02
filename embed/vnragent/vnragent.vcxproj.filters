@@ -501,5 +501,11 @@
     <QtMoc Include="..\..\vnr\libs\qtsocketsvc\localsocketclient.h">
       <Filter>Generated Files</Filter>
     </QtMoc>
+    <QtMoc Include="..\..\vnr\libs\libqxt\src\core\qxtglobal.h">
+      <Filter>Generated Files</Filter>
+    </QtMoc>
+    <QtMoc Include="..\..\vnr\libs\libqxt\src\core\qxtjson.h">
+      <Filter>Generated Files</Filter>
+    </QtMoc>
   </ItemGroup>
 </Project>

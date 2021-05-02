@@ -18,8 +18,10 @@ namespace IthVnrSharpLib.Engine
 		{
 			// ReSharper disable StringLiteralTypo
 			// ReSharper disable CommentTypo
-			//msvcr100.dll", // depends on kernel
-			//"msvcp100.dll", // depends on msvcr
+			//these are debug dlls, maybe use condition to use release libraries in release build.
+			"ucrtbased.dll",
+			"vcruntime140d.dll",
+			"msvcp140d.dll", 
 #if DEBUG
 "Qt5Cored.dll", // depends on msvcr, msvcp
 "Qt5Networkd.dll", //depends on qtcore

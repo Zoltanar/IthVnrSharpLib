@@ -23,8 +23,10 @@ namespace IthVnrSharpLib
 		private const string VnrHostDllName = "vnrhost.dll";
 		public static readonly string[] HookDlls =
 		{
-			//"msvcr100.dll", // depends on kernel
-			//"msvcp100.dll", // depends on msvcr
+			//these are debug dlls, maybe use condition to use release libraries in release build.
+			"ucrtbased.dll", 
+			"vcruntime140d.dll",
+			"msvcp140d.dll", 
 			"vnrhook.dll"
 		};
 		private const string IthServerMutex = "VNR_SERVER";
@@ -92,6 +94,7 @@ namespace IthVnrSharpLib
 		{
 			Debug.Assert(functionName != null, nameof(functionName) + " != null");
 			if (_externalDelegates.TryGetValue(functionName, out var func)) return (T)func;
+			if (_libraryHandle == IntPtr.Zero) throw new InvalidOperationException($"VNR Host Library was not loaded.");
 			var numArgs = GetBytesForArgs(typeof(T));
 			var funcName = $"_{functionName}@{numArgs}";
 			var functionPointer = WinAPI.GetProcAddress(_libraryHandle, funcName);
@@ -171,6 +174,7 @@ namespace IthVnrSharpLib
 			{
 				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, processId);
 				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+				//order of DLLs is important, dependencies should be injected before the dependent library.
 				foreach (var dll in dlls)
 				{
 					var result = InjectDll(procHandle, out errorMessage, dll, loadLibraryAddress, out var dataSize, out var allocMemAddress);

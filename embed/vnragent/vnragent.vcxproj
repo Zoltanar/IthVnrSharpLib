@@ -130,7 +130,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;.;C:\QtNew\5.15.0\msvc2019\include\QtNetwork\5.15.0;C:\QtNew\5.15.0\msvc2019\include\QtNetwork\5.15.0\QtNetwork;debug;C:\Users\Gusty\Documents\Visual Studio 2017\Projects\Happy Reader\IthVnrSharpLib\vnr\libs;C:\QtNew\5.15.0\msvc2019\include\QtCore\5.15.0;C:\QtNew\5.15.0\msvc2019\include\QtCore\5.15.0\QtCore;C:\Users\Gusty\Documents\Visual Studio 2017\Projects\Happy Reader\IthVnrSharpLib\vnr\libs\libqxt\include;C:\Users\Gusty\Documents\Visual Studio 2017\Projects\Happy Reader\IthVnrSharpLib\vnr\libs\libqxt\src\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;.;C:\QtNew\5.15.0\msvc2019\include\QtNetwork\5.15.0;C:\QtNew\5.15.0\msvc2019\include\QtNetwork\5.15.0\QtNetwork;C:\QtNew\5.15.0\msvc2019\include\QtCore\5.15.0;C:\QtNew\5.15.0\msvc2019\include\QtCore\5.15.0\QtCore;debug;..\..\vnr\libs;..\..\vnr\libs\libqxt\include;..\..\vnr\libs\libqxt\src\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>-Zc:rvalueCast -Zc:inline -Zc:strictStrings -Zc:throwingNew -Zc:referenceBinding -Zc:__cplusplus -w34100 -w34189 -w44996 -w44456 -w44457 -w44458 %(AdditionalOptions)</AdditionalOptions>
       <AssemblerListingLocation>debug\</AssemblerListingLocation>
       <BrowseInformation>false</BrowseInformation>

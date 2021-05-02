@@ -143,9 +143,9 @@ namespace IthVnrSharpLib
 			OnPropertyChanged(nameof(DisplayProcesses));
 		}
 
-		public void ReInitialize(out string errorMessage)
+		public void ReInitialize(TextOutputEvent updateDisplayText, out string errorMessage)
 		{
-			Initialize(_updateDisplayText, out errorMessage);
+			Initialize(updateDisplayText, out errorMessage);
 			Finalized = false;
 		}
 
