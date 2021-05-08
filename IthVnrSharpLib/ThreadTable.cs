@@ -8,6 +8,8 @@ namespace IthVnrSharpLib
 	{
 		public override object InitializeLifetimeService() => null;
 
+		private readonly object _syncObject = new();
+
 		private HookManagerWrapper _hookManager;
 
 		private readonly Dictionary<uint, IntPtr> _textThreadMap = new();
@@ -27,19 +29,28 @@ namespace IthVnrSharpLib
 
 		public void SetHookThread(uint num, IntPtr textThreadPointer)
 		{
-			if (!Map.TryGetValue(textThreadPointer, out _))
+			lock (_syncObject)
 			{
-				var thread = new HookTextThread(textThreadPointer);
-				_hookManager?.InitHookThread(thread);
-				Map[textThreadPointer] = thread;
+				if (!Map.TryGetValue(textThreadPointer, out _))
+				{
+					var thread = new HookTextThread(textThreadPointer);
+					_hookManager?.InitHookThread(thread);
+					Map[textThreadPointer] = thread;
+				}
+				_textThreadMap[num] = textThreadPointer;
 			}
-			_textThreadMap[num] = textThreadPointer;
 		}
 
 		public void CreateThread(TextThread textThread)
 		{
-			Map[textThread.Id] = textThread;
-			_textThreadMap[(uint)_textThreadMap.Count] = textThread.Id;
+			lock (_syncObject)
+			{
+				Map[textThread.Id] = textThread;
+				var num = (uint)_textThreadMap.Count;
+				textThread.Number = (ushort)num;
+				textThread.DisplayName = $@"{num:0000} {textThread.DisplayName}";
+				_textThreadMap[num] = textThread.Id;
+			}
 		}
 
 		public void Dispose()

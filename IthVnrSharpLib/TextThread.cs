@@ -81,7 +81,7 @@ namespace IthVnrSharpLib
 			}
 		}
 
-		public ushort Number { get; protected set; }
+		public ushort Number { get; set; }
 		public int ProcessId { get; set; }
 		public bool Removed { get; set; }
 		public abstract object MergeProperty { get; }

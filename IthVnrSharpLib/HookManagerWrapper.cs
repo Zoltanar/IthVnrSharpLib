@@ -226,8 +226,8 @@ namespace IthVnrSharpLib
 						prefEncoding = Encoding.Unicode;
 					}
 					hookTextThread.SetEncoding(prefEncoding);
-					return;
 				}
+				return;
 			}
 			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
@@ -306,9 +306,14 @@ namespace IthVnrSharpLib
 
 		public void Dispose()
 		{
-			foreach (var textThread in Threads) textThread.Value.Clear(true);
+			foreach (var textThread in Threads)
+			{
+				textThread.Value.Clear(true);
+				textThread.Value.Removed = true;
+			}
 			Threads.Clear();
 			_viewModel.ClearThreadDisplayCollection();
+			TextThread.ViewModel = null;
 			HookManager_RegisterThreadCreateCallback(null);
 			HookManager_RegisterThreadRemoveCallback(null);
 			HookManager_RegisterThreadResetCallback(null);

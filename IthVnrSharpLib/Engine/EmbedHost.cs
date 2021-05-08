@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace IthVnrSharpLib.Engine
@@ -48,7 +49,7 @@ namespace IthVnrSharpLib.Engine
 			try
 			{
 				_pipeServer = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances);
-				_listeningThread = new Thread(ServerThread) { Name = PipeHostThreadName };
+				_listeningThread = new Thread(async () => await ServerThread()) { Name = PipeHostThreadName };
 				_listeningThread.Start();
 			}
 			catch (Exception ex)
@@ -58,14 +59,14 @@ namespace IthVnrSharpLib.Engine
 			Initialized = true;
 		}
 
-		public bool SendSettings()
+		public async Task<bool> SendSettings()
 		{
 			if (!_pipeServer.IsConnected) return false;
 			try
 			{
 				var data = GetDataBytes("settings", new EmbedSettings());
 				var allBytes = BitConverter.GetBytes(data.Length).Reverse().Concat(data).ToArray();
-				_pipeServer.Write(allBytes, 0, allBytes.Length);
+				await _pipeServer.WriteAsync(allBytes, 0, allBytes.Length, _threadToken.Token);
 				return true;
 			}
 			catch (Exception ex)
@@ -120,23 +121,25 @@ namespace IthVnrSharpLib.Engine
 			return value;
 		}
 
-		private void ServerThread()
+		private readonly CancellationTokenSource _threadToken = new();
+
+		private async Task ServerThread()
 		{
 			try
 			{
-				_pipeServer.WaitForConnection();
+				await _pipeServer.WaitForConnectionAsync(_threadToken.Token);
 				do
 				{
 					var uintBuffer = new byte[sizeof(uint)];
-					var readBytes = _pipeServer.Read(uintBuffer, 0, uintBuffer.Length);
+					var readBytes = await _pipeServer.ReadAsync(uintBuffer, 0, uintBuffer.Length, _threadToken.Token);
 					if (readBytes < uintBuffer.Length) return;
 					var fullMessageSize = UnpackUInt32(uintBuffer, 0);
 					var messageSize = fullMessageSize;
 					var messageBytes = new byte[messageSize];
-					readBytes = _pipeServer.Read(messageBytes, 0, messageBytes.Length);
+					readBytes = await _pipeServer.ReadAsync(messageBytes, 0, messageBytes.Length, _threadToken.Token);
 					if (readBytes < messageBytes.Length) return;
 					//process synchronously because response may be required, assumption is only one client is connected at any time
-					ProcessMessage(messageBytes);
+					await ProcessMessage(messageBytes);
 				} while (true);
 			}
 			catch (Exception ex)
@@ -153,8 +156,8 @@ namespace IthVnrSharpLib.Engine
 				}
 			}
 		}
-
-		private void ProcessMessage(byte[] messageBytes)
+		
+		private async Task ProcessMessage(byte[] messageBytes)
 		{
 			var read = 0;
 			try
@@ -173,7 +176,7 @@ namespace IthVnrSharpLib.Engine
 					var arg = ReadString(messageBytes, argSizes[listIndex], ref read);
 					args.Add(arg);
 				}
-				ProcessMessage(args.First(), args.Skip(1).ToList());
+				await ProcessMessage(args.First(), args.Skip(1).ToList());
 			}
 			catch (Exception ex)
 			{
@@ -181,7 +184,7 @@ namespace IthVnrSharpLib.Engine
 			}
 		}
 
-		private void ProcessMessage(string messageType, List<string> arguments)
+		private async Task ProcessMessage(string messageType, List<string> arguments)
 		{
 			try
 			{
@@ -191,7 +194,7 @@ namespace IthVnrSharpLib.Engine
 						var pid = int.Parse(arguments.First());
 						StaticHelpers.LogToDebug($"Embed Host pinged by process : {pid}"); //todo post to console
 						_connectedProcessId = pid;
-						SendSettings();
+						await SendSettings();
 						break;
 					case MessageType.Settings:
 						break;
@@ -246,7 +249,8 @@ namespace IthVnrSharpLib.Engine
 		{
 			try
 			{
-				_listeningThread?.Abort();
+				_threadToken.Cancel();
+				if(!_listeningThread.Join(3000)) _listeningThread?.Abort();
 			}
 			catch (Exception ex)
 			{
