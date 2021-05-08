@@ -21,16 +21,10 @@ namespace IthVnrSharpLib.Engine
 			//these are debug dlls, maybe use condition to use release libraries in release build.
 			"ucrtbased.dll",
 			"vcruntime140d.dll",
-			"msvcp140d.dll", 
-#if DEBUG
-"Qt5Cored.dll", // depends on msvcr, msvcp
-"Qt5Networkd.dll", //depends on qtcore
-"Qt5Guid.dll", //depends on qtcore
-#else
-"Qt5Core.dll", // depends on msvcr, msvcp
-"Qt5Network.dll", //depends on qtcore
-"Qt5Gui.dll", //depends on qtcore
-#endif
+			"msvcp140d.dll",
+			"Qt5Cored.dll", /*depends on vcruntime, msvcp*/ 
+			"Qt5Networkd.dll", /*depends on qtcore*/
+			"Qt5Guid.dll", /*depends on qtcore*/
 			"vnragent.dll"
 			// ReSharper restore CommentTypo
 			// ReSharper restore StringLiteralTypo
@@ -195,7 +189,7 @@ namespace IthVnrSharpLib.Engine
 				{
 					case MessageType.Ping:
 						var pid = int.Parse(arguments.First());
-						StaticHelpers.LogToDebug($"Embed Host pinged by process : {pid}");
+						StaticHelpers.LogToDebug($"Embed Host pinged by process : {pid}"); //todo post to console
 						_connectedProcessId = pid;
 						SendSettings();
 						break;

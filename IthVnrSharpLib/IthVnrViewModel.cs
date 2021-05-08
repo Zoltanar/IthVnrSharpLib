@@ -25,7 +25,6 @@ namespace IthVnrSharpLib
 		private VNR.SetThreadCallback _threadTableSetThread;
 		private VNR.RegisterPipeCallback _registerPipe;
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
-		private TextOutputEvent _updateDisplayText;
 		private bool _finalized;
 		protected Action InitializeUserGameAction;
 
@@ -120,7 +119,6 @@ namespace IthVnrSharpLib
 			}
 			if (result)
 			{
-				_updateDisplayText = updateDisplayText;
 				_threadTableSetThread = ThreadTable.SetHookThread;
 				PipeAndRecordMap = new PipeAndProcessRecordMap();
 				_registerPipe = PipeAndRecordMap.RegisterPipe;
@@ -131,7 +129,6 @@ namespace IthVnrSharpLib
 			{
 				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrHost, ThreadTable);
 				PipeAndRecordMap.HookManager = HookManager;
-				Application.Current.Exit += Finalize;
 				Commands = new Commands(this);
 			}
 			else
@@ -212,7 +209,11 @@ namespace IthVnrSharpLib
 			GC.Collect();
 		}
 
-		protected virtual void SaveGameTextThreads()
+		/// <summary>
+		/// Called when a process is detached and/or when application closes.
+		/// Should clear GameTextThreads collection.
+		/// </summary>
+		public virtual void SaveGameTextThreads()
 		{
 			//can be overridden to save game text threads to persistent data storage
 		}

@@ -334,6 +334,9 @@ namespace IthVnrSharpLib
 		public void Dispose()
 		{
 			if (_disposed) return;
+			lock (this)
+			{
+				if (_disposed) return;
 			try
 			{
 				const int timeout = 5000;
@@ -353,6 +356,7 @@ namespace IthVnrSharpLib
 			finally
 			{
 				_disposed = true;
+				}
 			}
 		}
 

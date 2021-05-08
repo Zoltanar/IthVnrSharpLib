@@ -38,7 +38,7 @@ namespace IthVnrSharpLib
 		private ConcurrentList<byte> CurrentBytes { get; } = new();
 		public bool EncodingDefined { get; set; }
 
-		private string HookCode { get; set; }
+		public string HookCode { get; private set; }
 		private string HookNameless { get; set; }
 		public ThreadParameter Parameter { get; set; }
 		public override Encoding PrefEncoding

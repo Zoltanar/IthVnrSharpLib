@@ -94,13 +94,12 @@ namespace IthVnrSharpLib
 				}
 			}
 		}
-		
 		public void Add(T[] item)
 		{
 			lock (SyncRoot)
 			{
 				Items.Add(item);
-				if (TrimAt > 0 && Items.Count == TrimAt) Items.RemoveRange(0, TrimCount);
+				if (TrimAt > 0 && Items.Sum(x => x.Length) == TrimAt) Items.RemoveRange(0, TrimCount);
 			}
 		}
 

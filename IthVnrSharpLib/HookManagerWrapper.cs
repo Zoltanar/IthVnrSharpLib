@@ -178,6 +178,7 @@ namespace IthVnrSharpLib
 			_viewModel.PipeAndRecordMap.RemoveProcess(pid);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayThreads));
 			_viewModel.UserGameInitialized = false;
+			_viewModel.SaveGameTextThreads();
 			return 0;
 		}
 
