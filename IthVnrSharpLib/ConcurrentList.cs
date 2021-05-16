@@ -99,7 +99,20 @@ namespace IthVnrSharpLib
 			lock (SyncRoot)
 			{
 				Items.Add(item);
-				if (TrimAt > 0 && Items.Sum(x => x.Length) == TrimAt) Items.RemoveRange(0, TrimCount);
+				if (TrimAt <= 0) return;
+				var aggregateCount = Items.Sum(x => x.Length);
+				if (aggregateCount < TrimAt) return;
+				if (Items.Count == 1)
+				{
+					Items.Clear();
+					return;
+				}
+				var skipped = 0;
+				while (skipped < TrimCount && Items.Count > 0)
+				{
+					skipped += Items[0].Length;
+					Items.RemoveAt(0);
+				}
 			}
 		}
 

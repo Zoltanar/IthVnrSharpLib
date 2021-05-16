@@ -27,7 +27,7 @@ namespace IthVnrSharpLib
 		/// Print message to Debug and write it to log file.
 		/// </summary>
 		/// <param name="message">Message to be written</param>
-		public static void LogToFile(string message)
+		public static void PrivateLogToFile(string message)
 		{
 			Debug.Print(message);
 			int counter = 0;
@@ -41,10 +41,26 @@ namespace IthVnrSharpLib
 			writer.WriteLine(message);
 		}
 
-		[Conditional("DEBUG")]
+		public static Action<string> LogToDebugAction;
+		public static Action<string[]> LogToFileAction;
+		public static Action<Exception, string> LogExceptionToFileAction;
+
 		public static void LogToDebug(string text)
 		{
-			Debug.WriteLine(text);
+			if (LogToDebugAction != null) LogToDebugAction.Invoke(text);
+			else Debug.WriteLine(text);
+		}
+
+		public static void LogToFile(string text)
+		{
+			if (LogToFileAction != null) LogToFileAction.Invoke(new[] { text });
+			else PrivateLogToFile(text);
+		}
+
+		public static void LogToFile(Exception exception, [CallerMemberName] string source = null)
+		{
+			if (LogExceptionToFileAction != null) LogExceptionToFileAction(exception, source);
+			else PrivateLogExceptionToFile(exception, source);
 		}
 
 		/// <summary>
@@ -52,7 +68,7 @@ namespace IthVnrSharpLib
 		/// </summary>
 		/// <param name="exception">Exception to be written to file</param>
 		/// <param name="source">Source of error, CallerMemberName by default</param>
-		public static void LogToFile(Exception exception, [CallerMemberName] string source = null)
+		private static void PrivateLogExceptionToFile(Exception exception, [CallerMemberName] string source = null)
 		{
 			Debug.Print($"Source: {source}");
 			Debug.Print(exception.Message);

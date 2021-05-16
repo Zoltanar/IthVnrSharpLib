@@ -75,6 +75,7 @@
     <Compile Include="Engine\EmbedTextThread.cs" />
     <Compile Include="GameTextThread.cs" />
     <Compile Include="HookTextThread.cs" />
+    <Compile Include="Injector.cs" />
     <Compile Include="IthCommandHandler.cs" />
     <Compile Include="Commands.cs" />
     <Compile Include="ConcurrentList.cs" />

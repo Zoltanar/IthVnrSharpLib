@@ -15,7 +15,7 @@ namespace IthVnrSharpLib.Engine
 
 		private const string PipeHostThreadName = nameof(IthVnrSharpLib) + "." + nameof(Engine) + "." + nameof(EmbedHost) + "." + nameof(ServerThread);
 
-		public static readonly string[] AgentDlls =
+		private static readonly string[] AgentDlls =
 		{
 			// ReSharper disable StringLiteralTypo
 			// ReSharper disable CommentTypo
@@ -41,6 +41,11 @@ namespace IthVnrSharpLib.Engine
 		public EmbedHost(IthVnrViewModel mainViewModel)
 		{
 			_mainViewModel = mainViewModel;
+		}
+
+		public bool InjectIntoProcess(uint processId, out string errorMessage)
+		{
+			return Injector.Inject(processId, out errorMessage, AgentDlls, (_) => true);
 		}
 
 		public void Initialize()
@@ -250,7 +255,7 @@ namespace IthVnrSharpLib.Engine
 			try
 			{
 				_threadToken.Cancel();
-				if(!_listeningThread.Join(3000)) _listeningThread?.Abort();
+				if(!_listeningThread?.Join(3000) ?? false) _listeningThread?.Abort();
 			}
 			catch (Exception ex)
 			{

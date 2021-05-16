@@ -37,7 +37,7 @@ namespace IthVnrSharpLib
 		public abstract bool EncodingCanChange { get; }
 
 		public string DisplayName { get; set; }
-		public IntPtr Id { get; }
+		public IntPtr Id { get; protected set; }
 		public Dictionary<IntPtr, TextThread> MergedThreads { get; } = new();
 		private string MonitorThreadName => $"{nameof(IthVnrSharpLib)}.{nameof(TextThread)}.{nameof(StartMonitor)}:{Id}";
 		public GameTextThread GameThread { get; set; }
@@ -94,6 +94,14 @@ namespace IthVnrSharpLib
 			Id = id;
 			_monitorThread = new Thread(StartMonitor) {IsBackground = true, Name = MonitorThreadName};
 			_monitorThread.Start();
+		}
+
+		/// <summary>
+		/// Constructor for console thread.
+		/// </summary>
+		protected TextThread()
+		{
+
 		}
 
 		public event PropertyChangedEventHandler PropertyChanged;

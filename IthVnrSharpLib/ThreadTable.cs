@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace IthVnrSharpLib
 {
@@ -19,6 +20,15 @@ namespace IthVnrSharpLib
 		public void Initialize(HookManagerWrapper hookManager)
 		{
 			_hookManager = hookManager;
+		}
+
+		public void RemoveThread(IntPtr threadId, out TextThread thread)
+		{
+			lock (_syncObject)
+			{
+				if(!Map.TryRemove(threadId, out thread)) return;
+				_textThreadMap.Remove(thread.Number);
+			}
 		}
 
 		public IntPtr FindThread(uint number)
@@ -58,6 +68,40 @@ namespace IthVnrSharpLib
 			_hookManager?.Dispose();
 			_textThreadMap.Clear();
 			Map.Clear();
+		}
+
+		public void ChangeId(TextThread thread)
+		{
+			lock (_syncObject)
+			{
+				var pair = Map.FirstOrDefault(t => t.Value == thread);
+				if (pair.Value != default) 
+				{
+					var pointer = pair.Key;
+					var pair2 = _textThreadMap.FirstOrDefault(p => p.Value == pointer);
+					_textThreadMap.Remove(pair2.Key);
+					Map.TryRemove(pointer, out _);
+				}
+				CreateThread(thread);
+			}
+		}
+
+		public void Finalise()
+		{
+			_hookManager = null;
+		}
+
+		public void ClearAll(bool includeConsole)
+		{
+			List<TextThread> threads;
+			lock (_syncObject)
+			{
+				threads = includeConsole ? Map.Values.ToList() : Map.Values.Where(t => t is not ConsoleThread).ToList();
+			}
+			foreach (var thread in threads)
+			{
+				RemoveThread(thread.Id, out _);
+			}
 		}
 	}
 }

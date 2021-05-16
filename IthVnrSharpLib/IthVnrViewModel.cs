@@ -20,12 +20,14 @@ namespace IthVnrSharpLib
 	/// You must call Initialize on Window Load
 	/// </summary>
 	[Serializable]
-	public class IthVnrViewModel : INotifyPropertyChanged
+	public class IthVnrViewModel : INotifyPropertyChanged, IDisposable
 	{
 		private VNR.SetThreadCallback _threadTableSetThread;
 		private VNR.RegisterPipeCallback _registerPipe;
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private bool _finalized;
+		private bool _disposed = false;
+		private object _disposeLock = new();
 		protected Action InitializeUserGameAction;
 
 		public event PropertyChangedEventHandler PropertyChanged;
@@ -99,51 +101,15 @@ namespace IthVnrSharpLib
 		/// <summary>
 		/// Initializes ITHVNR, pass method to be called when display text should be updated.
 		/// </summary>
-		public void Initialize(TextOutputEvent updateDisplayText, out string errorMessage)
+		public void Initialize(TextOutputEvent updateDisplayText)
 		{
-			bool result;
 			ClearThreadDisplayCollection();
-			try
-			{
-				EmbedHost = new EmbedHost(this);
-				VnrHost = new VNR();
-				ThreadTable = new ThreadTableWrapper();
-				result = true;
-				errorMessage = string.Empty;
-			}
-			catch (Exception ex)
-			{
-				StaticHelpers.LogToFile(ex);
-				errorMessage = ex.ToString();
-				result = false;
-			}
-			if (result)
-			{
-				_threadTableSetThread = ThreadTable.SetHookThread;
-				PipeAndRecordMap = new PipeAndProcessRecordMap();
-				_registerPipe = PipeAndRecordMap.RegisterPipe;
-				_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
-				result = VnrHost.Host_Open2(_threadTableSetThread, _registerPipe, _registerProcessRecord, out errorMessage);
-			}
-			if (result)
-			{
-				HookManager = new HookManagerWrapper(this, updateDisplayText, VnrHost, ThreadTable);
-				PipeAndRecordMap.HookManager = HookManager;
-				Commands = new Commands(this);
-			}
-			else
-			{
-				Finalize(null, null);
-				Finalized = true;
-			}
+			EmbedHost = new EmbedHost(this);
+			ThreadTable = new ThreadTableWrapper();
+			HookManager = new HookManagerWrapper(this, updateDisplayText, ThreadTable);
+			Commands = new Commands(this);
 			OnPropertyChanged(nameof(HookManager));
 			OnPropertyChanged(nameof(DisplayProcesses));
-		}
-
-		public void ReInitialize(TextOutputEvent updateDisplayText, out string errorMessage)
-		{
-			Initialize(updateDisplayText, out errorMessage);
-			Finalized = false;
 		}
 
 		/// <summary>
@@ -175,38 +141,6 @@ namespace IthVnrSharpLib
 		public virtual void RemoveThreadFromDisplayCollection(TextThread textThread)
 		{
 			Application.Current.Dispatcher.Invoke(() => DisplayThreads.Remove(DisplayThreads.FirstOrDefault(x => x.Tag == textThread)));
-		}
-
-		public void Finalize(object sender, ExitEventArgs e)
-		{
-			if (Finalized) return;
-			var exitWatch = Stopwatch.StartNew();
-			Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Starting exit procedures...");
-			try
-			{
-				Settings.Save();
-				SaveGameTextThreads();
-				ClearThreadDisplayCollection();
-			}
-			catch (Exception ex)
-			{
-				Debug.WriteLine($"{nameof(IthVnrViewModel)}.{nameof(Finalize)} {ex.Message}");
-			}
-			finally
-			{
-				HookManager?.Dispose();
-				VnrHost?.Dispose();
-				EmbedHost?.Dispose();
-				HookManager = null;
-				Commands = null;
-				SelectedProcess = null;
-				VnrHost = null;
-				EmbedHost = null;
-				OnPropertyChanged(nameof(SelectedProcess));
-				Finalized = true;
-				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");
-			}
-			GC.Collect();
 		}
 
 		/// <summary>
@@ -269,10 +203,93 @@ namespace IthVnrSharpLib
 				thread.OnPropertyChanged(nameof(thread.Text));
 			}
 		}
-		
+
 		public virtual void AddGameThread(GameTextThread gameTextThread)
 		{
 			//can be overridden to save a new game text thread to persistent data storage
+		}
+
+		public bool InitialiseVnrHost()
+		{
+			try
+			{
+				VnrHost = new VNR();
+				_threadTableSetThread = ThreadTable.SetHookThread;
+				PipeAndRecordMap = new PipeAndProcessRecordMap { HookManager = HookManager };
+				_registerPipe = PipeAndRecordMap.RegisterPipe;
+				_registerProcessRecord = PipeAndRecordMap.RegisterProcessRecord;
+				var result = VnrHost.Host_Open2(_threadTableSetThread, _registerPipe, _registerProcessRecord, out var errorMessage);
+				if (!result)
+				{
+					HookManager.ConsoleOutput($"Failed to initialise VNR Host: {errorMessage}", true);
+					return false;
+				}
+				HookManager.InitialiseVnrHost(VnrHost);
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+				HookManager.ConsoleOutput($"Failed to initialise VNR Host: {ex}", true);
+				return false;
+			}
+			HookManager.ConsoleOutput($"Initialised VNR Host", true);
+			return true;
+		}
+
+
+		public void FinaliseVnrHost(int? delayMilliseconds)
+		{
+			try
+			{
+				HookManager.FinaliseVnrHost(delayMilliseconds);
+			}
+			catch (Exception ex)
+			{
+				StaticHelpers.LogToFile(ex);
+			}
+			finally
+			{
+				_threadTableSetThread = null;
+				PipeAndRecordMap = null;
+				VnrHost = null;
+			}
+		}
+
+		public void Dispose()
+		{
+			if (_disposed) return;
+			lock (_disposeLock)
+			{
+				if (_disposed) return;
+				var exitWatch = Stopwatch.StartNew();
+				Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Starting exit procedures...");
+				try
+				{
+					Settings.Save();
+					SaveGameTextThreads();
+					ClearThreadDisplayCollection();
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"{nameof(IthVnrViewModel)}.{nameof(Dispose)} {ex.Message}");
+				}
+				finally
+				{
+					FinaliseVnrHost(null);
+					HookManager?.Dispose();
+					ThreadTable?.Dispose();
+					EmbedHost?.Dispose();
+					HookManager = null;
+					ThreadTable = null;
+					Commands = null;
+					SelectedProcess = null;
+					VnrHost = null;
+					EmbedHost = null;
+					_disposed = true;
+					Debug.WriteLine($"[{nameof(IthVnrViewModel)}] Completed exit procedures, took {exitWatch.Elapsed}");
+				}
+				GC.Collect();
+			}
 		}
 	}
 }

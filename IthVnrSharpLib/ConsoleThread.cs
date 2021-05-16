@@ -27,7 +27,7 @@ namespace IthVnrSharpLib
 		public override bool EncodingCanChange { get; } = false;
 		public override string ToString() => Name;
 
-		public ConsoleThread(IntPtr id) : base(id)
+		public ConsoleThread()
 		{
 			DisplayName = Name;
 		}
@@ -62,5 +62,9 @@ namespace IthVnrSharpLib
 			if (IsDisplay) OnPropertyChanged(nameof(Text));
 		}
 
+		public void SetId(IntPtr idPointer)
+		{
+			Id = idPointer;
+		}
 	}
 }

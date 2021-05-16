@@ -11,7 +11,7 @@ namespace IthVnrSharpLib
 	{
 		private readonly HookManagerWrapper _hookManager;
 		private readonly IthVnrViewModel _viewModel;
-		private readonly VNR _vnrHost;
+		private VNR VnrHost => _viewModel.VnrHost;
 		private Regex ProcessAgentNameRegex { get; } = new("/pan(.+)", RegexOptions.IgnoreCase);
 		private Regex ProcessAgentRegex { get; } = new("/pa(.+)", RegexOptions.IgnoreCase);
 		private Regex ProcessNameRegex { get; } = new("/pn(.+)", RegexOptions.IgnoreCase);
@@ -27,7 +27,6 @@ namespace IthVnrSharpLib
 		{
 			_viewModel = viewModel;
 			_hookManager = viewModel.HookManager;
-			_vnrHost = viewModel.VnrHost;
 		}
 
 		public void ProcessCommand(string cmd, int pid)
@@ -117,11 +116,16 @@ namespace IthVnrSharpLib
 				_hookManager.ConsoleOutput($"Exception while parsing hook code: {ex}", true);
 				return false;
 			}
+			if (VnrHost == null)
+			{
+				var initialised = _viewModel.InitialiseVnrHost();
+				if (!initialised) return false;
+			}
 			var hookParamPointer = (IntPtr)(&hp);
 			_hookManager.ConsoleOutput($"Parsed code to: {hp}", true);
 			var commandHandle = _viewModel.PipeAndRecordMap.GetCommandHandle(pid);
 			if (commandHandle == IntPtr.Zero) return false;
-			var result = _vnrHost.Host_InsertHook(hookParamPointer, null, commandHandle);
+			var result = VnrHost.Host_InsertHook(hookParamPointer, null, commandHandle);
 			return result == 0;
 		}
 
@@ -137,9 +141,8 @@ namespace IthVnrSharpLib
 			try
 			{
 				process = Process.GetProcessById(processId);
-				var success = _vnrHost.Host_InjectByPID((uint)process.Id, out var errorMessage, hookAgent);
-				_hookManager.ConsoleOutput(success ? $"Injected into {process.ProcessName} ({process.Id})" : errorMessage,
-					true);
+				var success = InjectIntoProcess((uint)process.Id, out string errorMessage, hookAgent);
+				_hookManager.ConsoleOutput(success ? $"Injected into {process.ProcessName} ({process.Id})" : errorMessage, true);
 			}
 			catch (Exception ex)
 			{
@@ -149,6 +152,21 @@ namespace IthVnrSharpLib
 			{
 				process?.Dispose();
 			}
+		}
+
+		private bool InjectIntoProcess(uint processId, out string errorMessage, bool hookAgent)
+		{
+			if (!hookAgent && VnrHost == null)
+			{
+				var initialised = _viewModel.InitialiseVnrHost();
+				if (!initialised)
+				{
+					errorMessage = "Failed to initialise VNR Host.";
+					return false;
+				}
+			}
+			var success = !hookAgent ? VnrHost.InjectIntoProcess(processId, out errorMessage) : _viewModel.EmbedHost.InjectIntoProcess(processId, out errorMessage);
+			return success;
 		}
 
 		private void AttachWithProcessName(string cmd, bool hookAgent)
@@ -163,9 +181,8 @@ namespace IthVnrSharpLib
 						_hookManager.ConsoleOutput($"No processes found with name '{processName}'", true);
 						return;
 					case 1:
-						var success = _vnrHost.Host_InjectByPID((uint)processes[0].Id, out var errorMessage, hookAgent);
-						_hookManager.ConsoleOutput(
-							success ? $"Injected into {processes[0].ProcessName} ({processes[0].Id})" : errorMessage, true);
+						var success = InjectIntoProcess((uint)processes[0].Id, out var errorMessage, hookAgent);
+						_hookManager.ConsoleOutput(success ? $"Injected into {processes[0].ProcessName} ({processes[0].Id})" : errorMessage, true);
 						return;
 					default:
 						_hookManager.ConsoleOutput($"Multiple processes found with name '{processName}', use PID:", true);

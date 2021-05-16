@@ -21,12 +21,12 @@ namespace IthVnrSharpLib
 	public class VNR : MarshalByRefObject, IDisposable
 	{
 		private const string VnrHostDllName = "vnrhost.dll";
-		public static readonly string[] HookDlls =
+		private static readonly string[] HookDlls =
 		{
 			//these are debug dlls, maybe use condition to use release libraries in release build.
-			"ucrtbased.dll", 
+			"ucrtbased.dll",
 			"vcruntime140d.dll",
-			"msvcp140d.dll", 
+			"msvcp140d.dll",
 			"vnrhook.dll"
 		};
 		private const string IthServerMutex = "VNR_SERVER";
@@ -41,7 +41,6 @@ namespace IthVnrSharpLib
 			{ typeof(int), 4 },
 			{ typeof(uint), 4 },
 		};
-		private readonly int _ownProcessId;
 
 		private bool _hostOpen;
 		private bool _disposed;
@@ -82,12 +81,18 @@ namespace IthVnrSharpLib
 
 		public VNR()
 		{
-			var currentProcess = Process.GetCurrentProcess();
-			_ownProcessId = currentProcess.Id;
-			currentProcess.Dispose();
 			if (!File.Exists(VnrHostDllName)) throw new FileNotFoundException("VNR Host dll not found.", VnrHostDllName);
 			_libraryHandle = WinAPI.LoadLibrary(VnrHostDllName);
 			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+		}
+
+		public bool InjectIntoProcess(uint processId, out string errorMessage)
+		{
+			return Injector.Inject(
+				processId,
+				out errorMessage,
+				HookDlls,
+				(pid) => GetExternalDelegate<VNR.UIntReturnBoolDelegate>("Host_HandleCreateMutex")(pid));
 		}
 
 		private T GetExternalDelegate<T>([CallerMemberName] string functionName = null) where T : Delegate
@@ -135,100 +140,6 @@ namespace IthVnrSharpLib
 
 		#region Host
 		public bool Host_HijackProcess(uint pid) => GetExternalDelegate<UIntReturnBoolDelegate>()(pid);
-		public bool Host_InjectByPID(uint processId, out string errorMessage, bool hookEmbed)
-		{
-			bool result;
-			try
-			{
-				if (_ownProcessId == processId)
-				{
-					errorMessage = "Attempt to inject into own process denied.";
-					return false;
-				}
-				bool newlyAttached = hookEmbed || GetExternalDelegate<UIntReturnBoolDelegate>("Host_HandleCreateMutex")(processId);
-				if (!newlyAttached)
-				{
-					errorMessage = "Mutex already existed (likely already attached to target process).";
-					return false;
-				}
-				// getting the handle of the process - with required privileges
-				// searching for the address of LoadLibraryW and storing it in a pointer
-				result = InjectDlls((int)processId, hookEmbed ? EmbedHost.AgentDlls : HookDlls, out errorMessage);
-				//result = InjectOld(procHandle, hookEmbed, out errorMessage);
-			}
-			catch (Exception ex)
-			{
-				StaticHelpers.LogToFile(ex);
-				errorMessage = $"Failed to inject: {ex}";
-				result = false;
-			}
-			return result;
-		}
-
-		private static bool InjectDlls(int processId, string[] dlls, out string errorMessage)
-		{
-			errorMessage = string.Empty;
-			var memoryHandles = new List<(IntPtr handle, uint size)>();
-			var procHandle = IntPtr.Zero;
-			try
-			{
-				procHandle = WinAPI.OpenProcess(WinAPI.ProcessAccessPriviledges, false, processId);
-				var loadLibraryAddress = WinAPI.GetProcAddress(WinAPI.GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
-				//order of DLLs is important, dependencies should be injected before the dependent library.
-				foreach (var dll in dlls)
-				{
-					var result = InjectDll(procHandle, out errorMessage, dll, loadLibraryAddress, out var dataSize, out var allocMemAddress);
-					StaticHelpers.LogToDebug($"{nameof(InjectDll)} ({processId},'{dll}'):{result}");
-					memoryHandles.Add((allocMemAddress, dataSize));
-					if (!result) return false;
-				}
-			}
-			finally
-			{
-				foreach (var (handle, size) in memoryHandles.AsEnumerable().Reverse())
-				{
-					if (handle != IntPtr.Zero) WinAPI.VirtualFreeEx(procHandle, handle, size, WinAPI.AllocationType.Release);
-				}
-				if (procHandle != IntPtr.Zero) WinAPI.CloseHandle(procHandle);
-			}
-			return true;
-		}
-
-		private static bool InjectDll(IntPtr procHandle, out string errorMessage, string dll, IntPtr loadLibraryAddress,
-			out uint dataSize, out IntPtr allocMemAddress)
-		{
-			dataSize = 0;
-			allocMemAddress = IntPtr.Zero;
-			string dllName = Path.GetFullPath(dll);
-			if (!File.Exists(dllName))
-			{
-				dllName = Path.GetFullPath(Path.GetFileNameWithoutExtension(dll) + "d" + Path.GetExtension(dll));
-				if (!File.Exists(dllName))
-				{
-					errorMessage = $"DLL did not exist: '{dllName}'";
-					return false;
-				}
-			}
-			var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
-			dataSize = (uint)dllNameBytes.Length;
-			// allocating some memory on the target process - enough to store the name of the dll and storing its address in a pointer
-			allocMemAddress = WinAPI.VirtualAllocEx(procHandle, IntPtr.Zero, dataSize,
-				WinAPI.MEM_COMMIT | WinAPI.MEM_RESERVE, WinAPI.PAGE_READWRITE);
-			// writing the name of the dll there
-			WinAPI.WriteProcessMemory(procHandle, allocMemAddress, dllNameBytes, dataSize, out _);
-			// creating a thread that will call LoadLibraryW with allocMemAddress as argument
-			var thread = WinAPI.CreateRemoteThread(procHandle, IntPtr.Zero, 0, loadLibraryAddress, allocMemAddress, 0, IntPtr.Zero);
-			if (thread == IntPtr.Zero)
-			{
-				errorMessage = "Failed to create thread to load library.";
-				return false;
-			}
-			var waitResult = (WinAPI.WaitReturnCode)WinAPI.WaitForSingleObject(thread, 3000);
-			WinAPI.CloseHandle(thread);
-			var result = waitResult == WinAPI.WaitReturnCode.WAIT_OBJECT_0;
-			errorMessage = result != true ? $"Failed while loading {dll} library (timed out?): {waitResult}" : string.Empty;
-			return result;
-		}
 
 		public bool Host_Open2(SetThreadCallback setThreadCallback, RegisterPipeCallback registerPipeCallback, RegisterProcessRecordCallback registerProcessRecordCallback, out string errorMessage)
 		{
@@ -337,25 +248,38 @@ namespace IthVnrSharpLib
 			lock (this)
 			{
 				if (_disposed) return;
-			try
-			{
-				const int timeout = 5000;
-				if (_hostOpen)
+				try
 				{
-					var closeTask = Task.Run(Host_Close);
-					var success = closeTask.Wait(timeout);
-					if (!success) StaticHelpers.LogToFile($"Timed out during {nameof(Host_Close)}");
-					_hostOpen = false;
+					const int timeout = 5000;
+					if (_hostOpen)
+					{
+						var closeTask = Task.Run(Host_Close);
+						var success = closeTask.Wait(timeout);
+						if (!success) StaticHelpers.LogToFile($"Timed out during {nameof(Host_Close)}");
+						_hostOpen = false;
+					}
+					_antiGcList.Clear();
+					_antiGcDict.Clear();
+					_externalDelegates.Clear();
+					if (_libraryHandle == IntPtr.Zero) return;
+					try
+					{
+						StaticHelpers.LogToDebug($"{nameof(VNR)}.{nameof(Dispose)}, Before FreeLibrary");
+						WinAPI.FreeLibrary(_libraryHandle);
+						StaticHelpers.LogToDebug($"{nameof(VNR)}.{nameof(Dispose)}, After FreeLibrary");
+					}
+					catch (Exception ex)
+					{
+						StaticHelpers.LogToFile(ex, "Freeing VnrHost library");
+					}
+					finally
+					{
+						_libraryHandle = IntPtr.Zero;
+					}
 				}
-				_antiGcList.Clear();
-				_antiGcDict.Clear();
-				_externalDelegates.Clear();
-				WinAPI.FreeLibrary(_libraryHandle);
-				_libraryHandle = IntPtr.Zero;
-			}
-			finally
-			{
-				_disposed = true;
+				finally
+				{
+					_disposed = true;
 				}
 			}
 		}
