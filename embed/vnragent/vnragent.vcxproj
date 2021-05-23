@@ -159,6 +159,7 @@
       <SubSystem>Windows</SubSystem>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalOptions>/verbose:lib %(AdditionalOptions)</AdditionalOptions>
+      <Version>2.3</Version>
     </Link>
     <Midl>
       <DefaultCharType>Unsigned</DefaultCharType>
