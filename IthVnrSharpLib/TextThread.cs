@@ -170,6 +170,7 @@ namespace IthVnrSharpLib
 			var lengthPerSecond = lpsList.Average();
 			if (lengthPerSecond < 500) return false;
 			IsPaused = true;
+			if (IsPosting && ViewModel.Notify != null) ViewModel.Notify.Invoke(this, "Text Thread Paused", $"[{Number:0000}] Too much text in a short amount of time.");
 			return true;
 		}
 

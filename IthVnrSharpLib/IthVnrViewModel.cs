@@ -26,8 +26,9 @@ namespace IthVnrSharpLib
 		private VNR.RegisterPipeCallback _registerPipe;
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private bool _finalized;
-		private bool _disposed = false;
-		private object _disposeLock = new();
+		private bool _disposed;
+		private readonly object _disposeLock = new();
+		public Action<object, string, string> Notify { get; protected set; }
 		protected Action InitializeUserGameAction;
 
 		public event PropertyChangedEventHandler PropertyChanged;
