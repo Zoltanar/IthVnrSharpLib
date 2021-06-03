@@ -60,7 +60,7 @@ namespace IthVnrSharpLib
 		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand TogglePostOthersCommand { get; }
-		public GameTextThread[] GameTextThreads { get; set; } = new GameTextThread[0];
+		public ConcurrentList<GameTextThread> GameTextThreads { get; set; } = new();
 
 		public bool Finalized
 		{

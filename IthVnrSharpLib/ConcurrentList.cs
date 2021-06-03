@@ -55,6 +55,27 @@ namespace IthVnrSharpLib
 				Items.Add(item);
 			}
 		}
+
+		public List<TResult> SelectToList<TResult>(Func<T, TResult> func)
+		{
+			var list = new List<TResult>();
+			lock (SyncRoot)
+			{
+				foreach (var item in Items)
+				{
+					list.Add(func(item));
+				}
+			}
+			return list;
+		}
+
+		public T FirstOrDefault(Func<T, bool> func)
+		{
+			lock (SyncRoot)
+			{
+				return Items.FirstOrDefault(func);
+			}
+		}
 	}
 
 	public class ConcurrentArrayList<T> : ConcurrentListBase<T[]>

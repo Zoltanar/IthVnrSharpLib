@@ -5918,70 +5918,57 @@ bool InsertWaffleDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
   //ConsoleOutput("Unknown waffle engine.");
   return true; // jichi 12/25/2013: return true
 }
-//  DWORD retn,limit,str;
-//  WORD ch;
-//  NTSTATUS status;
-//  MEMORY_BASIC_INFORMATION info;
-//  str = *(DWORD*)(stack+0xC);
-//  ch = *(WORD*)str;
-//  if (ch<0x100) return false;
-//  limit = (stack | 0xFFFF) + 1;
-//  __asm int 3
-//  for (stack += 0x10; stack < limit; stack += 4)
-//  {
-//    str = *(DWORD*)stack;
-//    if ((str >> 16) != (stack >> 16))
-//    {
-//      status = NtQueryVirtualMemory(NtCurrentProcess(),(PVOID)str,MemoryBasicInformation,&info,sizeof(info),0);
-//      if (!NT_SUCCESS(status) || info.Protect & PAGE_NOACCESS) continue; //Accessible
-//    }
-//    if (*(WORD*)(str + 4) == ch) break;
-//  }
-//  if (stack < limit)
-//  {
-//    for (limit = stack + 0x100; stack < limit ; stack += 4)
-//    if (*(DWORD*)stack == -1)
-//    {
-//      retn = *(DWORD*)(stack + 4);
-//      if (retn > module_base_ && retn < module_limit_)
-//      {
-//        HookParam hp = {};
-//        hp.address = retn + *(DWORD*)(retn - 4);
-//        hp.length_offset = 1;
-//        hp.offset = -0x20;
-//        hp.index = 4;
-//        //hp.split = 0x1E8;
-//        hp.type = DATA_INDIRECT;
-//        NewHook(hp, "WAFFLE");
-//        //RegisterEngineType(ENGINE_WAFFLE);
-//        return true;
-//      }
-//
-//    }
-//
-//  }
 
 /** jichi 8/18/2015
  *  Sample game: 完全時間停止 体験版
  *  GDI text: TextOutA and GetTextExtentPoint32A
+ *  Updated from Textractor: https://github.com/Artikash/Textractor/blob/17822926620e4bc902fc2f67fe2207849d788f0a/texthook/engine/engine.cc  
  */
 void InsertWaffleHook()
 {
+  bool found = false;
   for (DWORD i = module_base_ + 0x1000; i < module_limit_ - 4; i++)
-    if (*(DWORD *)i == 0xac68) {
+    if (*(DWORD*)i == 0xac68) {
       HookParam hp = {};
       hp.address = i;
       hp.length_offset = 1;
-      hp.offset = -0x20;
+      hp.offset = 8;
       hp.index = 4;
       hp.split = 0x1e8;
-      hp.type = DATA_INDIRECT|USING_SPLIT;
+      hp.type = DATA_INDIRECT | USING_SPLIT;
       ConsoleOutput("vnreng: INSERT WAFFLE");
       NewHook(hp, "WAFFLE");
-      return;
+      found = true;
     }
+
+  /** new waffle?
+  *   test on 母三人とアナあそび https://vndb.org/v24214
+  *   and 変態エルフ姉妹と真面目オーク https://vndb.org/v24215
+  *   and いかにして俺の妻は孕んだか……  https://vndb.org/v26205
+  *   and 俺の知らぬ間に彼女が… https://vndb.org/v27781
+  */
+  const BYTE bytes[] = {
+      0x50,                     //50         push eax
+      0x8b, 0xce,               //8BCE mov   ecx,esi
+      0xc6, 0x45, 0xfc, XX,     //C645 FC 01 move byte ptr ss:[ebp-4],?
+      0x89, 0x75, 0xd4,         //8975 D4    move dword ptr ss:[ebp-0x2c],esi
+      0xe8, XX4,                //E8 ??      call ??
+      0x8d, 0x45, 0xdc          //8D45 DC    lea eax,dword ptr ss:[ebp-0x24]
+  };
+    if (DWORD addr = MemDbg::matchBytes(bytes, sizeof(bytes), module_base_, module_limit_))
+  {
+    HookParam hp = {};
+    hp.address = addr;
+    hp.offset = pusha_eax_off - 4;
+    hp.index = 0x00;
+    hp.length_offset = 1;
+    hp.type = DATA_INDIRECT;
+    ConsoleOutput("VnrHook: INSERT WAFFLE2");
+    NewHook(hp, "WAFFLE2");
+    found = true;
+  }
   //ConsoleOutput("Probably Waffle. Wait for text.");
-  trigger_fun_ = InsertWaffleDynamicHook;
+  if (!found) trigger_fun_ = InsertWaffleDynamicHook;
   SwitchTrigger(true);
   //ConsoleOutput("vnreng:WAFFLE: failed");
 }
