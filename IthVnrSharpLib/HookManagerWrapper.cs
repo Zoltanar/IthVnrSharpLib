@@ -98,7 +98,6 @@ namespace IthVnrSharpLib
 			TextThread.UpdateDisplay = updateDisplayText;
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
 			_viewModel = propertyChangedNotifier;
-			TextThread.ViewModel = _viewModel;
 			_threadTable = threadTable;
 			_consoleThread = new ConsoleThread();
 			//todo do not allow editing threads collection directly
@@ -147,7 +146,6 @@ namespace IthVnrSharpLib
 			if (removedTextThread != null)
 			{
 				_viewModel.RemoveThreadFromDisplayCollection(removedTextThread);
-				removedTextThread.Removed = true;
 				TextThread_RegisterOutputCallBack(thread, null, IntPtr.Zero);
 			}
 			//set as removed instead of removing
@@ -301,11 +299,9 @@ namespace IthVnrSharpLib
 			foreach (var textThread in Threads)
 			{
 				textThread.Value.Clear(true);
-				textThread.Value.Removed = true;
 			}
 			_threadTable.ClearAll(true);
 			_viewModel.ClearThreadDisplayCollection();
-			TextThread.ViewModel = null;
 		}
 
 
