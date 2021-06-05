@@ -77,6 +77,12 @@ namespace IthVnrSharpLib
 		public PipeAndProcessRecordMap PipeAndRecordMap { get; set; }
 		public bool UserGameInitialized { get; set; }
 
+		/// <summary>
+		/// Contains Hook Codes set to game when game has option to capture by hook code.
+		/// Indicates that game text threads should not be saved, if this array is not empty.
+		/// </summary>
+		public string[] GameHookCodes { get; set; } = Array.Empty<string>();
+
 		public void InitializeUserGame()
 		{
 			if (UserGameInitialized) return;

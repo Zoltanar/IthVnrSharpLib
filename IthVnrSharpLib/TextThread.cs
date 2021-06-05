@@ -76,6 +76,8 @@ namespace IthVnrSharpLib
 		public int ProcessId { get; set; }
 		public abstract object MergeProperty { get; }
 		public abstract string PersistentIdentifier { get; }
+		public virtual string DisplayIdentifier => PersistentIdentifier;
+
 		protected const int TextTrimAt = 2048;
 		protected const int TextTrimCount = 512;
 

@@ -22,6 +22,7 @@ namespace IthVnrSharpLib
 		public override object MergeProperty => HookCode;
 
 		public override string PersistentIdentifier => HookNameless;
+		public override string DisplayIdentifier => $"{HookNameless} {HookCode}";
 
 		public override string Text
 		{
