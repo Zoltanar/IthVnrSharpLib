@@ -17,7 +17,7 @@ namespace IthVnrSharpLib
 		private const uint MaxHook = 64;
 		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
 		private Encoding _prefEncoding = Encoding.Unicode;
-		private byte[] _lastUpdateBytes;
+		private byte[] _lastCopyBytes;
 
 		public override object MergeProperty => HookCode;
 
@@ -426,23 +426,26 @@ namespace IthVnrSharpLib
 			return WinAPI.GetModuleFileNameEx(pr.process_handle, allocationBase, path, 512) != 0 ? path.ToString() : "";
 		}
 
-		private void OnTick(byte[] bytes)
+		/// <summary>
+		/// Returns text from bytes.
+		/// </summary>
+		private string OnTick(byte[] bytes)
 		{
 			string text = PrefEncoding.GetString(bytes);
 			UpdateDisplay(this, new TextOutputEventArgs(this, text, "Internal", false));
+			return text;
 		}
 
-		private void OnTickCopy(byte[] bytes)
+		private void CopyTextToClipboard(string text, byte[] bytes)
 		{
-			var currentText = PrefEncoding.GetString(bytes);
-			if ((DateTime.UtcNow - LastUpdateTime).TotalMilliseconds > 20 && _lastUpdateBytes != bytes)
+			if ((DateTime.UtcNow - LastCopyTime).TotalMilliseconds > 20 && _lastCopyBytes != bytes)
 			{
 				var thread = new Thread(() =>
 				{
 					try
 					{
-						Debug.WriteLine($"Copying to clipboard at {DateTime.UtcNow:HH\\:mm\\:ss\\:fff}\t{currentText}");
-						Clipboard.SetText(currentText);
+						StaticHelpers.LogToDebug($"Copying to clipboard at {DateTime.UtcNow:HH\\:mm\\:ss\\:fff}\t{text}");
+						Clipboard.SetText(text);
 					}
 					catch (Exception ex)
 					{
@@ -453,10 +456,8 @@ namespace IthVnrSharpLib
 				thread.Start();
 				thread.Join(); //Wait for the thread to end
 			}
-
-			LastUpdateTime = DateTime.UtcNow;
-			_lastUpdateBytes = bytes;
-			UpdateDisplay(this, new TextOutputEventArgs(this, currentText, "Internal", true));
+			LastCopyTime = DateTime.UtcNow;
+			_lastCopyBytes = bytes;
 		}
 
 		private void SetTextThreadUnicodeStatus(ProcessRecord processRecord, uint hook)
@@ -479,8 +480,8 @@ namespace IthVnrSharpLib
 				if (!EncodingDefined && (IsDisplay || IsPosting)) SetEncoding(null);
 				if (IsDisplay) OnPropertyChanged(nameof(Text));
 				if (!IsPosting) return;
-				if (CopyToClipboard) OnTickCopy(currentBytes);
-				else OnTick(currentBytes);
+				var text = OnTick(currentBytes);
+				if (CopyToClipboard) CopyTextToClipboard(text, currentBytes);
 			}
 		}
 

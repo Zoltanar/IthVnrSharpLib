@@ -88,12 +88,8 @@ namespace IthVnrSharpLib
 			string dllName = Path.GetFullPath(dll);
 			if (!File.Exists(dllName))
 			{
-				dllName = Path.GetFullPath(Path.GetFileNameWithoutExtension(dll) + "d" + Path.GetExtension(dll));
-				if (!File.Exists(dllName))
-				{
-					errorMessage = $"DLL did not exist: '{dllName}'";
-					return false;
-				}
+				errorMessage = $"DLL did not exist: '{dllName}'";
+				return false;
 			}
 			var dllNameBytes = Encoding.Unicode.GetBytes(dllName);
 			dataSize = (uint)dllNameBytes.Length;

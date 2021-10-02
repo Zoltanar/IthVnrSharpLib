@@ -232,7 +232,7 @@ namespace IthVnrSharpLib
 		private void SetOptionsToNewThreadHookCodeOnly(TextThread thread)
 		{
 			var hookTextThread = thread as HookTextThread;
-			bool matchesHookCode = hookTextThread != null && _viewModel.GameHookCodes.Contains(hookTextThread.HookCode);
+			bool matchesHookCode = hookTextThread != null && _viewModel.GameHookCodes.Contains(hookTextThread.HookCode, StringComparer.OrdinalIgnoreCase);
 			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
 			thread.IsDisplay = matchesHookCode;

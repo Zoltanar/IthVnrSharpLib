@@ -53,11 +53,10 @@ namespace IthVnrSharpLib
 			}
 		}
 		public Encoding PrefEncoding { get; set; }
-		public IthVnrSettings Settings => StaticHelpers.CSettings;
+		public IthVnrSettings Settings => StaticHelpers.Settings;
 		public Brush MainTextBoxBackground => Finalized ? Brushes.DarkRed : Brushes.White;
 		public ICommand TogglePauseOthersCommand { get; }
 		public ICommand ToggleDisplayOthersCommand { get; }
-		public ICommand ClearThreadCommand { get; }
 		public ICommand ClearOtherThreadsCommand { get; }
 		public ICommand TogglePostOthersCommand { get; }
 		public ConcurrentList<GameTextThread> GameTextThreads { get; set; } = new();
@@ -94,7 +93,6 @@ namespace IthVnrSharpLib
 		{
 			TogglePauseOthersCommand = new IthCommandHandler(TogglePauseOtherThreads);
 			ToggleDisplayOthersCommand = new IthCommandHandler(ToggleDisplayOtherThreads);
-			ClearThreadCommand = new IthCommandHandler(ClearThread);
 			ClearOtherThreadsCommand = new IthCommandHandler(ClearOtherThreads);
 			TogglePostOthersCommand = new IthCommandHandler(TogglePostOtherThreads);
 		}
@@ -191,15 +189,7 @@ namespace IthVnrSharpLib
 				thread.IsDisplay = toggleValue ??= !thread.IsDisplay;
 			}
 		}
-
-		public void ClearThread()
-		{
-			var thread = SelectedTextThread;
-			if (thread == null) return;
-			thread.Clear(false);
-			thread.OnPropertyChanged(nameof(thread.Text));
-		}
-
+		
 		public void ClearOtherThreads()
 		{
 			var selected = SelectedTextThread;
@@ -297,6 +287,11 @@ namespace IthVnrSharpLib
 				}
 				GC.Collect();
 			}
+		}
+
+		public virtual void SaveHookCode(TextThread thread)
+		{
+			//override to save hook code to game object
 		}
 	}
 }

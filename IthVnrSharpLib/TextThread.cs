@@ -23,13 +23,15 @@ namespace IthVnrSharpLib
 		private bool _isDisplay = true;
 		private bool _isPaused;
 		private bool _isPosting;
-		protected DateTime LastUpdateTime = DateTime.MinValue;
+		protected DateTime LastCopyTime = DateTime.MinValue;
 
 		protected abstract void OnTimerEnd(object sender, ElapsedEventArgs e);
 
 		public abstract string Text { get; }
 		public abstract Encoding PrefEncoding { get; set; }
 		public abstract bool EncodingCanChange { get; }
+		public bool CanSaveHookCode => this is HookTextThread;
+		public bool IsNotConsole => this is not ConsoleThread;
 
 		public string DisplayName { get; set; }
 		public IntPtr Id { get; protected set; }
