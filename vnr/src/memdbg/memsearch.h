@@ -4,6 +4,8 @@
 // memsearch.h
 // 4/20/2014 jichi
 
+#include <vector>
+#include "engine/engine.h"
 #include "memdbg/memdbg.h"
 #ifndef MEMDBG_NO_STL
 # include <functional>
@@ -184,6 +186,8 @@ enum : byte_t { WidecardByte = 0x11 }; // jichi 7/17/2014: 0x11 seldom appear in
 //enum : WORD { WidecardWord = 0xffff };
 dword_t matchBytes(const void *pattern, dword_t patternSize, dword_t lowerBound, dword_t upperBound,
                    byte_t wildcard = WidecardByte);
+
+std::vector<uint64_t> SearchMemory(const void* bytes, short length, DWORD protect = PAGE_EXECUTE, uintptr_t minAddr = 0, uintptr_t maxAddr = -1ULL);
 
 // User space: 0 - 2G (0 - 0x7ffeffff)
 // Kernel space: 2G - 4G  (0x80000000 - 0xffffffff)

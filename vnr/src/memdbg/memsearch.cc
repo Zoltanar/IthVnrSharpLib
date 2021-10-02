@@ -1,7 +1,9 @@
 // memsearch.cc
 // 4/20/2014 jichi
 #include "memdbg/memsearch.h"
+#include <vector>
 #include <windows.h>
+#include "main.h"
 
 // Helpers
 
@@ -788,6 +790,54 @@ DWORD matchBytes(const void *pattern, DWORD patternSize, DWORD lowerBound, DWORD
 {
   DWORD reladdr = searchPatternEx(lowerBound, upperBound - lowerBound, pattern, patternSize, wildcard);
   return reladdr ? lowerBound + reladdr : 0;
+}
+enum WildcardByte { XX = 0x11 };
+
+uint64_t SafeSearchMemory(uint64_t startAddr, uint64_t endAddr, const BYTE* bytes, short length)
+{
+  __try
+  {
+    for (int i = 0; i < endAddr - startAddr - length; ++i)
+      for (int j = 0; j <= length; ++j)
+        if (j == length) return startAddr + i; // not sure about this algorithm...
+        else if (*((BYTE*)startAddr + i + j) != *(bytes + j) && *(bytes + j) != XX) break;
+  }
+  __except (EXCEPTION_EXECUTE_HANDLER)
+  {
+    ConsoleOutput("Textractor: SearchMemory ERROR (Textractor will likely still work fine, but please let Artikash know if this happens a lot!)");
+  }
+  return 0;
+}
+
+std::vector<uint64_t> SearchMemory(const void* bytes, short length, DWORD protect, uintptr_t minAddr, uintptr_t maxAddr)
+{
+  SYSTEM_INFO systemInfo;
+  GetNativeSystemInfo(&systemInfo);
+  std::vector<std::pair<uint64_t, uint64_t>> validMemory;
+  for (BYTE* probe = NULL; probe < systemInfo.lpMaximumApplicationAddress;)
+  {
+    MEMORY_BASIC_INFORMATION info = {};
+    if (!VirtualQuery(probe, &info, sizeof(info)))
+    {
+      probe += systemInfo.dwPageSize;
+      continue;
+    }
+    else
+    {
+      if ((uint64_t)info.BaseAddress + info.RegionSize >= minAddr && info.Protect >= protect && !(info.Protect & PAGE_GUARD))
+        validMemory.push_back({ (uint64_t)info.BaseAddress, info.RegionSize });
+      probe += info.RegionSize;
+    }
+  }
+
+  std::vector<uint64_t> ret;
+  for (auto memory : validMemory)
+    for (uint64_t addr = max(memory.first, minAddr); true;)
+      if (addr < maxAddr && (addr = SafeSearchMemory(addr, memory.first + memory.second, (const BYTE*)bytes, length)))
+        ret.push_back(addr++);
+      else break;
+
+  return ret;
 }
 
 //DWORD reverseFindBytes(const void *pattern, DWORD patternSize, DWORD lowerBound, DWORD upperBound)
