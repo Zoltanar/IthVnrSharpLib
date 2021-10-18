@@ -131,5 +131,11 @@ namespace IthVnrSharpLib
 		}
 		
 		public abstract string SearchForText(string searchTerm, bool searchAllEncodings);
+
+		public virtual GameTextThread FindSaved(ConcurrentList<GameTextThread> gameTextThreads)
+		{
+			var savedThread = gameTextThreads.FirstOrDefault(t => string.Equals(t.Identifier, PersistentIdentifier, StringComparison.OrdinalIgnoreCase));
+			return savedThread;
+		}
 	}
 }

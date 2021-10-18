@@ -27,5 +27,7 @@ namespace IthVnrSharpLib
 		internal static void LogToFile(string text) => _logToFileAction?.Invoke(new[] { text });
 
 		internal static void LogToFile(Exception exception, [CallerMemberName] string source = null) => _logExceptionToFileAction?.Invoke(exception, source);
+
+		internal static string ToEmoji(this bool value) => value ? "✔" : "❌";
 	}
 }

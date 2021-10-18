@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
 using System.Windows;
@@ -16,6 +17,8 @@ namespace IthVnrSharpLib
 	{
 		private const uint MaxHook = 64;
 		private static readonly Encoding ShiftJis = Encoding.GetEncoding("SHIFT-JIS");
+		private static readonly Regex IdentifierRegex = new(@"0x(?<hook>[0-9a-f]+):0x(?<retn>[0-9a-f]+):0x(?<spl>[0-9a-f]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
 		private Encoding _prefEncoding = Encoding.Unicode;
 		private byte[] _lastCopyBytes;
 
@@ -33,6 +36,7 @@ namespace IthVnrSharpLib
 			}
 		}
 
+		//todo: can remove this?
 		public uint Addr => Parameter.hook;
 
 		private ConcurrentArrayList<byte> Bytes { get; } = new(TextTrimAt * 4, TextTrimCount * 4);
@@ -474,7 +478,6 @@ namespace IthVnrSharpLib
 				if (CurrentBytes.Count == 0) return;
 				byte[] currentBytes = CurrentBytes.ArrayCopy();
 				CurrentBytes.Clear();
-				//if(_monitorThread != null) _monitorPairs[DateTime.UtcNow] = currentBytes.Length;
 				if (currentBytes.Length > 2000) return; //todo report error, make 2000 a setting
 				Bytes.Add(currentBytes);
 				if (!EncodingDefined && (IsDisplay || IsPosting)) SetEncoding(null);
@@ -483,6 +486,25 @@ namespace IthVnrSharpLib
 				var text = OnTick(currentBytes);
 				if (CopyToClipboard) CopyTextToClipboard(text, currentBytes);
 			}
+		}
+
+		public override GameTextThread FindSaved(ConcurrentList<GameTextThread> gameTextThreads)
+		{
+			var savedThread = base.FindSaved(gameTextThreads);
+			if (savedThread != null) return savedThread;
+			savedThread = gameTextThreads.FirstOrDefault(t =>
+			{
+				var match = IdentifierRegex.Match(t.Identifier);
+				if (!match.Success) return false;
+				var savedRetn = match.Groups["retn"].Value;
+				var savedRetnRight = savedRetn.Substring(Math.Max(savedRetn.Length - 4, 0));
+				var thisRetn = Parameter.retn.ToString("X");
+				var thisRetnRight = thisRetn.Substring(Math.Max(savedRetn.Length - 4, 0));
+				return savedRetnRight.Equals(thisRetnRight, StringComparison.OrdinalIgnoreCase) &&
+				       match.Groups["spl"].Value.Equals(Parameter.spl.ToString("X"), StringComparison.OrdinalIgnoreCase);
+			});
+			if (savedThread != null) StaticHelpers.LogToDebug($"{nameof(FindSaved)}: Found match between {PersistentIdentifier} and {savedThread.Identifier}");
+			return savedThread;
 		}
 
 		private class EncodingBools

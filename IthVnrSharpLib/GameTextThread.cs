@@ -21,7 +21,7 @@
 			Encoding = System.Text.Encoding.Unicode.WebName;
 		}
 
-		public string Options => $"'{Label}' Display: {IsDisplay}, Posting: {IsPosting}, Paused: {IsPaused}";
+		public string Options => $"'{Label}' Display: {IsDisplay.ToEmoji()}, Posting: {IsPosting.ToEmoji()}, Paused: {IsPaused.ToEmoji()}";
 
 		public override string ToString() => $"[{GameId}] {Identifier} {Label}";
 	}

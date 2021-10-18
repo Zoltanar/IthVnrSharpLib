@@ -199,7 +199,8 @@ namespace IthVnrSharpLib
 				SetOptionsToNewThreadHookCodeOnly(thread);
 				return;
 			}
-			var savedThread = _viewModel.GameTextThreads.FirstOrDefault(t => string.Equals(t.Identifier, thread.PersistentIdentifier, StringComparison.OrdinalIgnoreCase));
+
+			var savedThread = thread.FindSaved(_viewModel.GameTextThreads);
 			if (savedThread != null)
 			{
 				ConsoleOutput($"Thread number {thread.Number:0000} (saved), '{thread.DisplayIdentifier}': {savedThread.Options}", true);
@@ -215,7 +216,7 @@ namespace IthVnrSharpLib
 				}
 				catch (ArgumentException)
 				{
-					prefEncoding = Encoding.Unicode;
+					prefEncoding = _viewModel.PrefEncoding;
 				}
 				hookTextThread.SetEncoding(prefEncoding);
 				return;
@@ -223,7 +224,7 @@ namespace IthVnrSharpLib
 			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
 			_viewModel.AddGameThread(gameTextThread);
-			if(thread is HookTextThread hookTextThread1) hookTextThread1.SetEncoding(_viewModel.PrefEncoding);
+			if (thread is HookTextThread hookTextThread1) hookTextThread1.SetEncoding(_viewModel.PrefEncoding);
 			thread.IsPosting = ShowLatestThread;
 			if (thread.IsPosting && !Paused) UpdateDisplayThread(thread);
 			ConsoleOutput($"Thread number {thread.Number:0000} (new) '{thread.DisplayIdentifier}': {gameTextThread.Options}", true);
@@ -242,7 +243,7 @@ namespace IthVnrSharpLib
 			if (thread.IsPosting && !Paused) UpdateDisplayThread(thread);
 			ConsoleOutput($"Thread number {thread.Number:0000} (hook code {(matchesHookCode ? "match" : "mismatch")}) '{thread.DisplayIdentifier}': {gameTextThread.Options}", true);
 		}
-		
+
 		public void InitHookThread(HookTextThread thread)
 		{
 			thread.Parameter = Marshal.PtrToStructure<ThreadParameter>(TextThread_GetThreadParameter(thread.Id));
