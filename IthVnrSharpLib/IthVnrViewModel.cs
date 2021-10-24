@@ -27,6 +27,7 @@ namespace IthVnrSharpLib
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private bool _finalized;
 		private bool _disposed;
+		private bool _userGameInitialized;
 		private readonly object _disposeLock = new();
 		public Action<object, string, string> Notify { get; protected set; }
 		protected Action InitializeUserGameAction;
@@ -74,7 +75,16 @@ namespace IthVnrSharpLib
 		}
 
 		public PipeAndProcessRecordMap PipeAndRecordMap { get; set; }
-		public bool UserGameInitialized { get; set; }
+
+		public bool UserGameInitialized
+		{
+			get => _userGameInitialized;
+			set
+			{
+				_userGameInitialized = value;
+				OnPropertyChanged();
+			}
+		}
 
 		/// <summary>
 		/// Contains Hook Codes set to game when game has option to capture by hook code.

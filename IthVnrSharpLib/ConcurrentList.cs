@@ -56,6 +56,14 @@ namespace IthVnrSharpLib
 			}
 		}
 
+		public bool Remove(T item)
+		{
+			lock (SyncRoot)
+			{
+				return Items.Remove(item);
+			}
+		}
+
 		public List<TResult> SelectToList<TResult>(Func<T, TResult> func)
 		{
 			var list = new List<TResult>();

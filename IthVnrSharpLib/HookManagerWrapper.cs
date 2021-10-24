@@ -225,6 +225,8 @@ namespace IthVnrSharpLib
 			thread.GameThread = gameTextThread;
 			_viewModel.AddGameThread(gameTextThread);
 			if (thread is HookTextThread hookTextThread1) hookTextThread1.SetEncoding(_viewModel.PrefEncoding);
+			thread.IsDisplay = gameTextThread.IsDisplay;
+			thread.IsPaused = gameTextThread.IsPaused;
 			thread.IsPosting = ShowLatestThread;
 			if (thread.IsPosting && !Paused) UpdateDisplayThread(thread);
 			ConsoleOutput($"Thread number {thread.Number:0000} (new) '{thread.DisplayIdentifier}': {gameTextThread.Options}", true);
