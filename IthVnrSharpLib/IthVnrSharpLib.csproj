@@ -70,6 +70,7 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ClipboardThread.cs" />
     <Compile Include="Engine\EmbedHost.cs" />
     <Compile Include="Engine\EmbedSettings.cs" />
     <Compile Include="Engine\EmbedTextThread.cs" />

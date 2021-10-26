@@ -409,5 +409,16 @@ namespace IthVnrSharpLib
 				StaticHelpers.LogToDebug($"{nameof(FinaliseVnrHost)} Exit");
 			}
 		}
+
+		public void ClipboardOutput(string text, Process clipboardOwner, string name)
+		{
+			if (!Threads.TryGetValue(TextThread.ClipboardPtr, out var clipboardThread))
+			{
+				clipboardThread = new ClipboardThread();
+				Threads[clipboardThread.Id] = clipboardThread;
+				_viewModel.AddNewThreadToDisplayCollection(clipboardThread);
+			}
+			clipboardThread.AddText((text,clipboardOwner,name));
+		}
 	}
 }

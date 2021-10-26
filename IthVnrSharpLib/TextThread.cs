@@ -11,6 +11,8 @@ namespace IthVnrSharpLib
 {
 	public abstract class TextThread : INotifyPropertyChanged
 	{
+		public static readonly IntPtr ClipboardPtr = IntPtr.Subtract(IntPtr.Zero, 2);
+
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		public static Func<bool> CopyToClipboardFunc;
@@ -64,7 +66,7 @@ namespace IthVnrSharpLib
 
 		public virtual bool IsPosting
 		{
-			get => _isPosting;
+			get => false;//_isPosting;
 			set
 			{
 				_isPosting = value;
