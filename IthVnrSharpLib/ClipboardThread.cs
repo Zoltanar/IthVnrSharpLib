@@ -13,9 +13,10 @@ namespace IthVnrSharpLib
 			set => throw new NotSupportedException();
 		}
 		public override bool EncodingCanChange { get; } = false;
+		public override bool IsSystem { get; } = true;
 		private readonly StringBuilder _textBuffer = new(1000);
 
-		public ClipboardThread() : base(TextThread.ClipboardPtr)
+		public ClipboardThread()
 		{
 			DisplayName = "Clipboard";
 			ProcessId = -1;
@@ -35,8 +36,8 @@ namespace IthVnrSharpLib
 			return firstLineWith;
 		}
 
-		public override object MergeProperty => Id;
-		public override string PersistentIdentifier => $"{(uint)Id:X8},Clipboard";
+		public override object MergeProperty => throw new NotSupportedException();
+		public override string PersistentIdentifier => "Clipboard";
 
 		public override void AddText(object value)
 		{

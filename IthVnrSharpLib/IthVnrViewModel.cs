@@ -171,7 +171,7 @@ namespace IthVnrSharpLib
 		{
 			var selected = SelectedTextThread;
 			bool? toggleValue = null;
-			foreach (var thread in HookManager.Threads.Values)
+			foreach (var thread in HookManager.TextThreads.Values)
 			{
 				if (thread == selected) continue;
 				thread.IsPosting = toggleValue ??= !thread.IsPosting;
@@ -182,7 +182,7 @@ namespace IthVnrSharpLib
 		{
 			var selected = SelectedTextThread;
 			bool? toggleValue = null;
-			foreach (var thread in HookManager.Threads.Values)
+			foreach (var thread in HookManager.TextThreads.Values)
 			{
 				if (thread == selected) continue;
 				thread.IsPaused = toggleValue ??= !thread.IsPaused;
@@ -193,17 +193,17 @@ namespace IthVnrSharpLib
 		{
 			var selected = SelectedTextThread;
 			bool? toggleValue = null;
-			foreach (var thread in HookManager.Threads.Values)
+			foreach (var thread in HookManager.TextThreads.Values)
 			{
 				if (thread == selected) continue;
 				thread.IsDisplay = toggleValue ??= !thread.IsDisplay;
 			}
 		}
-		
+
 		public void ClearOtherThreads()
 		{
 			var selected = SelectedTextThread;
-			foreach (var thread in HookManager.Threads.Values)
+			foreach (var thread in HookManager.TextThreads.Values)
 			{
 				if (thread == selected) continue;
 				thread.Clear(false);

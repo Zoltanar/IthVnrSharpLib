@@ -7,8 +7,9 @@ namespace IthVnrSharpLib
 	public class ConsoleThread : TextThread
 	{
 		private const string Name = @"Console";
-		public override object MergeProperty => null;
+		public override object MergeProperty => new NotSupportedException();
 		public override string PersistentIdentifier { get; } = Name;
+		public override bool IsSystem { get; } = true;
 
 		public override bool IsPaused
 		{
@@ -60,11 +61,6 @@ namespace IthVnrSharpLib
 			Timer?.Close();
 			Timer = null;
 			if (IsDisplay) OnPropertyChanged(nameof(Text));
-		}
-
-		public void SetId(IntPtr idPointer)
-		{
-			Id = idPointer;
 		}
 	}
 }

@@ -13,9 +13,16 @@ namespace IthVnrSharpLib
 
 		private HookManagerWrapper _hookManager;
 
+		/// <summary>
+		/// This object exists solely for fast execution of <see cref="FindThread"/>.
+		/// </summary>
 		private readonly Dictionary<uint, IntPtr> _textThreadMap = new();
 
+		public TextThread ConsoleThread { get; private set; }
+		private TextThread _clipboardThread;
+		private ConcurrentList<TextThread> List { get; } = new();
 		public ConcurrentDictionary<IntPtr, TextThread> Map { get; } = new();
+		public IEnumerable<TextThread> AllThreads => List.Concat(Map.Values.OrderBy(t => t.Number));
 
 		public void Initialize(HookManagerWrapper hookManager)
 		{
@@ -26,25 +33,48 @@ namespace IthVnrSharpLib
 		{
 			lock (_syncObject)
 			{
-				if(!Map.TryRemove(threadId, out thread)) return;
+				if (!Map.TryRemove(threadId, out thread)) return;
 				_textThreadMap.Remove(thread.Number);
 			}
 		}
 
+		public TextThread CreateConsoleThread()
+		{
+			ConsoleThread = new ConsoleThread();
+			List.Add(ConsoleThread);
+			return ConsoleThread;
+		}
+
+		public TextThread GetClipboardThread(out bool justCreated, out int index)
+		{
+			justCreated = _clipboardThread == null;
+			if (justCreated)
+			{
+				_clipboardThread = new ClipboardThread();
+				List.Add(_clipboardThread);
+				index = List.Count - 1;
+			}
+			else index = -1;
+			return _clipboardThread;
+		}
+
 		public IntPtr FindThread(uint number)
 		{
-			if (_textThreadMap.TryGetValue(number, out var threadPointer) && Map.TryGetValue(threadPointer, out var thread)) return thread.Id;
+			// ReSharper disable once InconsistentlySynchronizedField
+			if (_textThreadMap.TryGetValue(number, out var threadPointer)) return threadPointer;
 			return IntPtr.Zero;
 		}
 
 		public void SetHookThread(uint num, IntPtr textThreadPointer)
 		{
+			//if hook manager is still null, this is console thread, ignore
+			if (_hookManager == null) return;
 			lock (_syncObject)
 			{
 				if (!Map.TryGetValue(textThreadPointer, out _))
 				{
 					var thread = new HookTextThread(textThreadPointer);
-					_hookManager?.InitHookThread(thread);
+					_hookManager.InitHookThread(thread);
 					Map[textThreadPointer] = thread;
 				}
 				_textThreadMap[num] = textThreadPointer;
@@ -62,41 +92,25 @@ namespace IthVnrSharpLib
 				_textThreadMap[num] = textThread.Id;
 			}
 		}
-
+		
 		public void Dispose()
 		{
 			_hookManager?.Dispose();
 			_textThreadMap.Clear();
 			Map.Clear();
 		}
-
-		public void ChangeId(TextThread thread)
-		{
-			lock (_syncObject)
-			{
-				var pair = Map.FirstOrDefault(t => t.Value == thread);
-				if (pair.Value != default) 
-				{
-					var pointer = pair.Key;
-					var pair2 = _textThreadMap.FirstOrDefault(p => p.Value == pointer);
-					_textThreadMap.Remove(pair2.Key);
-					Map.TryRemove(pointer, out _);
-				}
-				CreateThread(thread);
-			}
-		}
-
+		
 		public void Finalise()
 		{
 			_hookManager = null;
 		}
 
-		public void ClearAll(bool includeConsole)
+		public void ClearAll(bool includeSystem)
 		{
 			List<TextThread> threads;
 			lock (_syncObject)
 			{
-				threads = includeConsole ? Map.Values.ToList() : Map.Values.Where(t => t is not ConsoleThread).ToList();
+				threads = (includeSystem ? AllThreads : Map.Values).ToList();
 			}
 			foreach (var thread in threads)
 			{

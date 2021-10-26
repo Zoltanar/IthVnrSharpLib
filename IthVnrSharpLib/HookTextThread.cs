@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
 using System.Windows;
@@ -23,6 +22,7 @@ namespace IthVnrSharpLib
 
 		public override object MergeProperty => HookCode;
 
+		public override bool IsSystem { get; } = false;
 		public override string PersistentIdentifier => HookNameless;
 		public override string DisplayIdentifier => $"{HookNameless} {HookCode}";
 

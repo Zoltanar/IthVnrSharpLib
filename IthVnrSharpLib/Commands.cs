@@ -81,7 +81,7 @@ namespace IthVnrSharpLib
 				_hookManager.ConsoleOutput($"Failed to parse '{cmd.Substring(3)}' as a hexadecimal number.", true);
 				return;
 			}
-			var thread = _hookManager.Threads.Values.FirstOrDefault(x => x.Number == threadId);
+			var thread = _hookManager.TextThreads.Values.FirstOrDefault(x => x.Number == threadId);
 			if (thread == null) _hookManager.ConsoleOutput($"Failed to find thread with Id '{threadId}'.", true);
 			else
 			{

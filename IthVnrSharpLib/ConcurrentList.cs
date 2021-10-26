@@ -1,11 +1,12 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 // ReSharper disable UnusedMember.Global
 
 namespace IthVnrSharpLib
 {
-	public abstract class ConcurrentListBase<T>
+	public abstract class ConcurrentListBase<T> : IEnumerable<T>
 	{
 		public object SyncRoot { get; } = new();
 		protected readonly List<T> Items = new();
@@ -35,6 +36,17 @@ namespace IthVnrSharpLib
 			{
 				Items.AddRange(collection);
 			}
+		}
+
+		public IEnumerator<T> GetEnumerator()
+		{
+			// ReSharper disable once InconsistentlySynchronizedField
+			return Items.GetEnumerator();
+		}
+
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			return GetEnumerator();
 		}
 	}
 

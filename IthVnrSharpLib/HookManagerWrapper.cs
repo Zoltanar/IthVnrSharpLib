@@ -19,11 +19,13 @@ namespace IthVnrSharpLib
 		private VNR VnrHost => _viewModel.VnrHost;
 		private IntPtr _hookManager;
 		private readonly ThreadTableWrapper _threadTable;
-		private readonly ConsoleThread _consoleThread;
 
 		private bool _mergeByHookCode;
 		//todo do not allow editing threads collection directly
-		public ConcurrentDictionary<IntPtr, TextThread> Threads => _threadTable.Map;
+		/// <summary>
+		/// Does not include system threads like Console and Clipboard
+		/// </summary>
+		public ConcurrentDictionary<IntPtr, TextThread> TextThreads => _threadTable.Map;
 		public ConcurrentDictionary<int, ProcessInfo> Processes { get; } = new();
 		public bool Paused { get; set; }
 		public bool ShowLatestThread { get; set; }
@@ -35,7 +37,7 @@ namespace IthVnrSharpLib
 			{
 				if (value == _mergeByHookCode) return;
 				_mergeByHookCode = value;
-				if (_consoleThread == null) return;
+				if (_viewModel == null) return;
 				var selectedThreadPointer = _viewModel.SelectedTextThread?.Id ?? IntPtr.Zero;
 				if (_mergeByHookCode) MergeThreads();
 				else UnmergeThreads();
@@ -52,7 +54,7 @@ namespace IthVnrSharpLib
 		private void UnmergeThreads()
 		{
 			var unmergedThreads = new List<TextThread>();
-			foreach (var thread in Threads.Values)
+			foreach (var thread in TextThreads.Values)
 			{
 				unmergedThreads.Add(thread);
 				foreach (var mergedThread in thread.MergedThreads.Values) unmergedThreads.Add(mergedThread);
@@ -61,19 +63,22 @@ namespace IthVnrSharpLib
 
 			_threadTable.ClearAll(false);
 			//todo do not allow editing threads collection directly
-			foreach (var thread in unmergedThreads) Threads[thread.Id] = thread;
+			foreach (var thread in unmergedThreads) TextThreads[thread.Id] = thread;
 			ResetDisplayCollection();
 		}
 
 		private void ResetDisplayCollection()
 		{
 			_viewModel.ClearThreadDisplayCollection();
-			foreach (var textThread in Threads.Values) _viewModel.AddNewThreadToDisplayCollection(textThread);
+			foreach (var textThread in _threadTable.AllThreads)
+			{
+				_viewModel.AddNewThreadToDisplayCollection(textThread);
+			}
 		}
 
 		private void MergeThreads()
 		{
-			var mergedGroups = Threads.Values.OrderBy(x => x.Number).GroupBy(x => x.MergeProperty);
+			var mergedGroups = TextThreads.Values.OrderBy(x => x.Number).GroupBy(x => x.MergeProperty);
 			var mergedThreads = new List<TextThread>();
 			foreach (var mergedGroup in mergedGroups)
 			{
@@ -89,7 +94,7 @@ namespace IthVnrSharpLib
 			}
 			_threadTable.ClearAll(false);
 			//todo do not allow editing threads collection directly
-			foreach (var thread in mergedThreads) Threads[thread.Id] = thread;
+			foreach (var thread in mergedThreads) TextThreads[thread.Id] = thread;
 			ResetDisplayCollection();
 		}
 
@@ -99,10 +104,8 @@ namespace IthVnrSharpLib
 			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
 			_viewModel = propertyChangedNotifier;
 			_threadTable = threadTable;
-			_consoleThread = new ConsoleThread();
-			//todo do not allow editing threads collection directly
-			Threads[IntPtr.Zero] = _consoleThread;
-			_viewModel.AddNewThreadToDisplayCollection(_consoleThread);
+			var consoleThread = _threadTable.CreateConsoleThread();
+			_viewModel.AddNewThreadToDisplayCollection(consoleThread);
 			ConsoleOutput(StaticHelpers.VersionInfo, true);
 		}
 
@@ -114,8 +117,8 @@ namespace IthVnrSharpLib
 
 		public void ConsoleOutput(string text, bool show)
 		{
-			_consoleThread.AddText(text);
-			if (show) UpdateDisplayThread(_consoleThread);
+			_threadTable.ConsoleThread.AddText(text);
+			if (show) UpdateDisplayThread(_threadTable.ConsoleThread);
 		}
 
 		private static void UpdateDisplayThread(TextThread thread)
@@ -157,7 +160,7 @@ namespace IthVnrSharpLib
 		{
 			Processes.TryRemove(pid, out _);
 			_viewModel.OnPropertyChanged(nameof(_viewModel.DisplayProcesses));
-			var associatedThreads = Threads.Values.Where(x => x.ProcessId == pid).ToList();
+			var associatedThreads = TextThreads.Values.Where(x => x.ProcessId == pid).ToList();
 			foreach (var associatedThread in associatedThreads)
 			{
 				_threadTable.RemoveThread(associatedThread.Id, out _);
@@ -260,7 +263,7 @@ namespace IthVnrSharpLib
 		private void GetOrCreateThread(IntPtr threadPointer, out TextThread thread)
 		{
 			_viewModel.InitializeUserGame();
-			if (Threads.TryGetValue(threadPointer, out thread))
+			if (TextThreads.TryGetValue(threadPointer, out thread))
 			{
 				if (thread.LinkTo != null) thread = thread.LinkTo;
 				return;
@@ -268,7 +271,7 @@ namespace IthVnrSharpLib
 			if (MergeByHookCode)
 			{
 				//if this pointer is already in another thread's merged collection
-				var existingMerged = Threads.FirstOrDefault(x => x.Value.MergedThreads.Keys.Contains(threadPointer)).Value;
+				var existingMerged = TextThreads.FirstOrDefault(x => x.Value.MergedThreads.Keys.Contains(threadPointer)).Value;
 				if (existingMerged != null)
 				{
 					thread = existingMerged;
@@ -279,7 +282,7 @@ namespace IthVnrSharpLib
 				InitHookThread(hookThread);
 				var threadMergeProperty = thread.MergeProperty;
 				//if another thread exists with same hook code (the master thread)
-				var existingMaster = Threads.Values.FirstOrDefault(x => x.MergeProperty == threadMergeProperty);
+				var existingMaster = TextThreads.Values.FirstOrDefault(x => x.MergeProperty == threadMergeProperty);
 				if (existingMaster != null)
 				{
 					existingMaster.MergedThreads[threadPointer] = thread;
@@ -295,13 +298,19 @@ namespace IthVnrSharpLib
 				InitHookThread(hookThread);
 			}
 			//todo do not allow editing threads collection directly
-			Threads[threadPointer] = thread;
+			TextThreads[threadPointer] = thread;
 		}
 
 		public int AddTextToThread(IntPtr threadPointer, object textObject, int len, bool newLine)
 		{
 			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			GetOrCreateThread(threadPointer, out var thread);
+			return AddTextToThread(thread, textObject, len, newLine);
+		}
+
+		public int AddTextToThread(TextThread thread, object textObject, int len, bool newLine)
+		{
+			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
 			if (!ShowLatestThread && (thread.IsPaused || (IgnoreOtherThreads && !thread.IsDisplay))) return len;
 			if (newLine) return len;
 			if (ShowLatestThread) thread.IsDisplay = true;
@@ -316,7 +325,7 @@ namespace IthVnrSharpLib
 		public void Dispose()
 		{
 			FinaliseVnrHost(null);
-			foreach (var textThread in Threads)
+			foreach (var textThread in TextThreads)
 			{
 				textThread.Value.Clear(true);
 			}
@@ -327,13 +336,13 @@ namespace IthVnrSharpLib
 
 		public void AddLink(uint fromThreadNumber, uint toThreadNumber)
 		{
-			var fromThread = Threads.Values.FirstOrDefault(x => x.Number == fromThreadNumber);
+			var fromThread = TextThreads.Values.FirstOrDefault(x => x.Number == fromThreadNumber);
 			if (fromThread == null)
 			{
 				ConsoleOutput($"Thread with number {fromThreadNumber:X} not found.", true);
 				return;
 			}
-			var toThread = Threads.Values.FirstOrDefault(x => x.Number == toThreadNumber);
+			var toThread = TextThreads.Values.FirstOrDefault(x => x.Number == toThreadNumber);
 			if (toThread == null)
 			{
 				ConsoleOutput($"Thread with number {fromThreadNumber:X} not found.", true);
@@ -353,7 +362,7 @@ namespace IthVnrSharpLib
 
 		public void FindThreadWithText(string searchTerm, bool searchAllEncodings)
 		{
-			foreach (var thread in Threads.Values.OrderBy(t => t.Number))
+			foreach (var thread in TextThreads.Values.OrderBy(t => t.Number))
 			{
 				var lineFound = thread.SearchForText(searchTerm, searchAllEncodings);
 				if (lineFound != null) ConsoleOutput($"Found text in thread {thread.DisplayName}: {lineFound}", true);
@@ -370,10 +379,6 @@ namespace IthVnrSharpLib
 			HookManager_RegisterThreadCreateCallback(ThreadCreate);
 			HookManager_RegisterThreadRemoveCallback(ThreadRemove);
 			HookManager_RegisterThreadResetCallback(ThreadReset);
-			var console = _threadTable.FindThread(0);
-			_consoleThread.SetId(console);
-			_threadTable.ChangeId(_consoleThread);
-			TextThread_RegisterOutputCallBack(console, ThreadOutput, IntPtr.Zero);
 			VnrHost.HookManager_RegisterConsoleCallback(_hookManager, ConsoleOutput2);
 			HookManager_RegisterProcessAttachCallback(RegisterProcessList);
 			HookManager_RegisterProcessDetachCallback(RemoveProcessList);
@@ -412,10 +417,9 @@ namespace IthVnrSharpLib
 
 		public void ClipboardOutput(string text, Process clipboardOwner, string name)
 		{
-			if (!Threads.TryGetValue(TextThread.ClipboardPtr, out var clipboardThread))
+			var clipboardThread = _threadTable.GetClipboardThread(out var created, out var index);
+			if (created)
 			{
-				clipboardThread = new ClipboardThread();
-				Threads[clipboardThread.Id] = clipboardThread;
 				_viewModel.AddNewThreadToDisplayCollection(clipboardThread);
 			}
 			clipboardThread.AddText((text,clipboardOwner,name));

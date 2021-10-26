@@ -13,6 +13,7 @@ namespace IthVnrSharpLib.Engine
 			set => throw new NotSupportedException();
 		}
 		public override bool EncodingCanChange { get; } = false;
+		public override bool IsSystem { get; } = false;
 		private readonly StringBuilder _currentTextBuffer = new(1000);
 		private readonly StringBuilder _textBuffer = new(1000);
 		public TextRole Role { get; }

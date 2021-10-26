@@ -11,8 +11,6 @@ namespace IthVnrSharpLib
 {
 	public abstract class TextThread : INotifyPropertyChanged
 	{
-		public static readonly IntPtr ClipboardPtr = IntPtr.Subtract(IntPtr.Zero, 2);
-
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
 		public static Func<bool> CopyToClipboardFunc;
@@ -33,7 +31,7 @@ namespace IthVnrSharpLib
 		public abstract Encoding PrefEncoding { get; set; }
 		public abstract bool EncodingCanChange { get; }
 		public bool CanSaveHookCode => this is HookTextThread;
-		public bool IsNotConsole => this is not ConsoleThread;
+		public abstract bool IsSystem { get; }
 
 		public string DisplayName { get; set; }
 		public IntPtr Id { get; protected set; }
@@ -66,7 +64,7 @@ namespace IthVnrSharpLib
 
 		public virtual bool IsPosting
 		{
-			get => false;//_isPosting;
+			get => _isPosting;
 			set
 			{
 				_isPosting = value;
