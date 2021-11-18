@@ -155,13 +155,13 @@ namespace IthVnrSharpLib
 		private static string ToHexString(uint number) => $"{number:X}";
 		private static string ToHexString(long number) => $"{(int)number:X}";
 
-		public string GetTextForEncoding(Encoding encoding)
+		private string GetTextForEncoding(Encoding encoding)
 		{
 			string curString = encoding.GetString(CurrentBytes.ArrayCopy());
 			string result;
 			lock (Bytes.SyncRoot)
 			{
-				result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(x => PrefEncoding.GetString(x)))
+				result = string.Join(Environment.NewLine, Bytes.ReadOnlyList.Select(encoding.GetString))
 								 + Environment.NewLine + curString;
 			}
 
