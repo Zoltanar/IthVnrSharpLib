@@ -424,5 +424,30 @@ namespace IthVnrSharpLib
 			}
 			clipboardThread.AddText((text,clipboardOwner,name));
 		}
-	}
+
+        public void SwitchEncoding(string value)
+        {
+            Encoding encoding;
+            try
+            {
+                encoding = Encoding.GetEncoding(value);
+            }
+            catch (Exception ex)
+            {
+                ConsoleOutput($"Error getting encoding for '{value}': {ex}", true);
+                return;
+            }
+            if (!IthVnrViewModel.Encodings.Contains(encoding))
+
+			{
+                ConsoleOutput($"Encoding not supported: '{encoding}'", true);
+                return;
+            }
+            ConsoleOutput($"Setting encoding of all panels to: '{encoding.EncodingName}'", true);
+            foreach (var textThread in TextThreads)
+            {
+                textThread.Value.PrefEncoding = encoding;
+            }
+        }
+    }
 }

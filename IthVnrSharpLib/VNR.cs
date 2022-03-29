@@ -192,37 +192,37 @@ namespace IthVnrSharpLib
 		public IntPtr HookManager_GetProcessRecord(IntPtr hookManager, uint pid) => GetExternalDelegate<PtrAndUIntReturnPtrDelegate>()(hookManager, pid);//Inner.HookManager.HookManager_GetProcessRecord(hookManager, pid);
 		public void HookManager_RegisterProcessAttachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			GetExternalDelegate<RegisterProcessEventDelegate>()(hookManager, callback);
 		}
 		public void HookManager_RegisterProcessDetachCallback(IntPtr hookManager, ProcessEventCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			GetExternalDelegate<RegisterProcessEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadCreateCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadRemoveCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
 		public uint HookManager_RegisterThreadResetCallback(IntPtr hookManager, ThreadEventCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			return GetExternalDelegate<RegisterThreadEventDelegate>()(hookManager, callback);
 		}
 		public void HookManager_RegisterConsoleCallback(IntPtr hookManager, ConsoleCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			GetExternalDelegate<RegisterConsoleCallbackDelegate>()(hookManager, callback);
 		}
 		public void ThreadTable_RegisterGetThread(IntPtr hookManagerPointer, GetThreadCallback callback)
 		{
-			_antiGcList.Add(callback);
+			if(callback != null) _antiGcList.Add(callback);
 			GetExternalDelegate<RegisterGetThreadDelegate>("HookManager_RegisterGetThreadCallback")(hookManagerPointer, callback);
 		}
 

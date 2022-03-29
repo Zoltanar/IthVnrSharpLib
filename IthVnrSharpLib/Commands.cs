@@ -21,7 +21,8 @@ namespace IthVnrSharpLib
 		private Regex UnlinkRegex { get; } = new(":u(.+)", RegexOptions.IgnoreCase);
 		private Regex HelpRegex { get; } = new("(:h|:help)", RegexOptions.IgnoreCase);
 		private Regex SearchRegex { get; } = new("(:s|:search) (.+)", RegexOptions.IgnoreCase);
-		private Regex SearchAllRegex { get; } = new("(:sa|:searchall) (.+)", RegexOptions.IgnoreCase);
+        private Regex SearchAllRegex { get; } = new("(:sa|:searchall) (.+)", RegexOptions.IgnoreCase);
+        private Regex EncodingRegex { get; } = new("(:e|:encoding) (.+)", RegexOptions.IgnoreCase);
 
 		public Commands(IthVnrViewModel viewModel)
 		{
@@ -47,6 +48,7 @@ namespace IthVnrSharpLib
 			else if (HelpRegex.IsMatch(cmd)) _hookManager.ConsoleOutput(CommandUsage, true);
 			else if ((searchMatch = SearchRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value, false);
 			else if ((searchMatch = SearchAllRegex.Match(cmd)).Success) _hookManager.FindThreadWithText(searchMatch.Groups[2].Value, true);
+			else if ((searchMatch = EncodingRegex.Match(cmd)).Success) _hookManager.SwitchEncoding(searchMatch.Groups[2].Value);
 			else _hookManager.ConsoleOutput("Unrecognized command.", true);
 		}
 
