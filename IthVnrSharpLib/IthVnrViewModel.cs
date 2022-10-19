@@ -29,7 +29,6 @@ namespace IthVnrSharpLib
 		private bool _disposed;
 		private bool _userGameInitialized;
 		private readonly object _disposeLock = new();
-		public Action<object, string, string> Notify { get; protected set; }
 		protected Action InitializeUserGameAction;
 
 		public event PropertyChangedEventHandler PropertyChanged;
