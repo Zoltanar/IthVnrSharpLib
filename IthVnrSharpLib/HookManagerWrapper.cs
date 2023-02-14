@@ -226,7 +226,7 @@ namespace IthVnrSharpLib
 			}
 			var gameTextThread = new GameTextThread(thread);
 			thread.GameThread = gameTextThread;
-			_viewModel.AddGameThread(gameTextThread);
+			_viewModel.AddGameThread(gameTextThread, thread.ProcessId);
 			if (thread is HookTextThread hookTextThread1) hookTextThread1.SetEncoding(_viewModel.PrefEncoding);
 			thread.IsDisplay = gameTextThread.IsDisplay;
 			thread.IsPaused = gameTextThread.IsPaused;
@@ -262,12 +262,12 @@ namespace IthVnrSharpLib
 
 		private void GetOrCreateThread(IntPtr threadPointer, out TextThread thread)
 		{
-			_viewModel.InitializeUserGame();
 			if (TextThreads.TryGetValue(threadPointer, out thread))
 			{
 				if (thread.LinkTo != null) thread = thread.LinkTo;
 				return;
-			}
+            }
+            _viewModel.InitializeUserGame(thread.ProcessId);
 			if (MergeByHookCode)
 			{
 				//if this pointer is already in another thread's merged collection
@@ -311,7 +311,7 @@ namespace IthVnrSharpLib
 		public int AddTextToThread(TextThread thread, object textObject, int len, bool newLine)
 		{
 			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
-			if (!ShowLatestThread && (thread.IsPaused || (IgnoreOtherThreads && !thread.IsDisplay))) return len;
+			if (!ShowLatestThread && (thread.IsPaused || (thread.Id != _viewModel.SelectedTextThread?.Id && IgnoreOtherThreads))) return len;
 			if (newLine) return len;
 			if (ShowLatestThread) thread.IsDisplay = true;
 			thread.AddText(textObject);

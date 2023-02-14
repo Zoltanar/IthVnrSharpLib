@@ -47,7 +47,8 @@ namespace IthVnrSharpLib
 				_isDisplay = value;
 				OnPropertyChanged();
 				if (GameThread != null) GameThread.IsDisplay = _isDisplay;
-			}
+				if(_isDisplay) OnPropertyChanged(nameof(Text));
+            }
 		}
 
 		public virtual bool IsPaused

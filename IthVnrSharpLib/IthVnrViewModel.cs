@@ -29,7 +29,10 @@ namespace IthVnrSharpLib
 		private bool _disposed;
 		private bool _userGameInitialized;
 		private readonly object _disposeLock = new();
-		protected Action InitializeUserGameAction;
+		/// <summary>
+		/// Argument is Process Id.
+		/// </summary>
+		protected Action<int> InitializeUserGameAction;
 
 		public event PropertyChangedEventHandler PropertyChanged;
 		public HookManagerWrapper HookManager { get; protected set; }
@@ -57,9 +60,10 @@ namespace IthVnrSharpLib
 		public Brush MainTextBoxBackground => Finalized ? Brushes.DarkRed : Brushes.White;
 		public ICommand TogglePauseOthersCommand { get; }
 		public ICommand ToggleDisplayOthersCommand { get; }
-		public ICommand ClearOtherThreadsCommand { get; }
-		public ICommand TogglePostOthersCommand { get; }
-		public ConcurrentList<GameTextThread> GameTextThreads { get; set; } = new();
+        public ICommand ClearOtherThreadsCommand { get; }
+        public ICommand TogglePostOthersCommand { get; }
+        public ICommand StopHideOthersCommand { get; }
+        public ConcurrentList<GameTextThread> GameTextThreads { get; set; } = new();
 
 		public bool Finalized
 		{
@@ -91,10 +95,10 @@ namespace IthVnrSharpLib
 		/// </summary>
 		public string[] GameHookCodes { get; set; } = Array.Empty<string>();
 
-		public void InitializeUserGame()
+		public void InitializeUserGame(int processId)
 		{
 			if (UserGameInitialized) return;
-			InitializeUserGameAction?.Invoke();
+			InitializeUserGameAction?.Invoke(processId);
 			UserGameInitialized = true;
 		}
 
@@ -104,6 +108,7 @@ namespace IthVnrSharpLib
 			ToggleDisplayOthersCommand = new IthCommandHandler(ToggleDisplayOtherThreads);
 			ClearOtherThreadsCommand = new IthCommandHandler(ClearOtherThreads);
 			TogglePostOthersCommand = new IthCommandHandler(TogglePostOtherThreads);
+			StopHideOthersCommand = new IthCommandHandler(StopHideOtherThreads);
 		}
 
 		[NotifyPropertyChangedInvocator]
@@ -209,8 +214,21 @@ namespace IthVnrSharpLib
 				thread.OnPropertyChanged(nameof(thread.Text));
 			}
 		}
+		public void StopHideOtherThreads()
+		{
+			var selected = SelectedTextThread;
+			foreach (var thread in HookManager.TextThreads.Values)
+			{
+				if (thread == selected) continue;
+				thread.IsDisplay = false;
+				thread.IsPosting = false;
+				thread.IsPaused = true;
+				thread.OnPropertyChanged(nameof(thread.Text));
+			}
+		}
 
-		public virtual void AddGameThread(GameTextThread gameTextThread)
+
+        public virtual void AddGameThread(GameTextThread gameTextThread, int processId)
 		{
 			//can be overridden to save a new game text thread to persistent data storage
 		}
