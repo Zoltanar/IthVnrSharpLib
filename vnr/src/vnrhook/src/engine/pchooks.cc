@@ -5,8 +5,32 @@
 #include "src/main.h"
 //#include <gdiplus.h>
 
+enum { STRING = 12, MESSAGE_SIZE = 500, PIPE_BUFFER_SIZE = 50000, SHIFT_JIS = 932, MAX_MODULE_SIZE = 120, PATTERN_SIZE = 30, HOOK_NAME_SIZE = 60,  };
 #define DEBUG "vnrcli"
 #define DPRINT(cstr) ConsoleOutput(DEBUG ":" __FUNCTION__ ":" cstr) // defined in vnrcli
+
+DWORD Hash(const std::wstring& module, int length = -1)
+{
+    DWORD hash = 0;
+    auto end = (length < 0 || static_cast<size_t>(length) > module.length()) ?
+        module.end() :
+        module.begin() + length;
+    for (auto it = module.begin(); it != end; ++it)
+        hash = _rotr(hash, 7) + *it;
+    return hash;
+}
+
+static std::wstring charToWString(const char* text)
+{
+    const size_t size = std::strlen(text);
+    std::wstring wstr;
+    if (size > 0) {
+        wstr.resize(size);
+        std::mbstowcs(&wstr[0], text, size);
+    }
+    return wstr;
+}
+
 
 // 8/1/2014 jichi: Split is not used.
 // Although split is specified, USING_SPLIT is not assigned.
@@ -37,6 +61,48 @@
     if (DWORD addr = (DWORD)::GetProcAddress(_module, #_fun)) \
       NEW_HOOK_AT(addr, _fun, _data, _data_ind, _split_off, _split_ind, _type, _len_off) \
   }
+#define NEW_HOOK_DLL_NAME(_dll, _fun, _data, _data_ind, _split_off, _split_ind, _type, _len_off) \
+  { \
+    HookParam hp = {}; \
+    wchar_t moduleName[MAX_MODULE_SIZE]; \
+    char functionName[MAX_MODULE_SIZE]; \
+	wcsncpy_s(moduleName, _dll, MAX_MODULE_SIZE - 1); \
+	strncpy_s(functionName, #_fun, MAX_MODULE_SIZE - 1); \
+    hp.module = Hash(moduleName); \
+    hp.function = Hash(charToWString(functionName)); \
+    hp.offset = _data; \
+    hp.index = _data_ind; \
+    hp.split = _split_off; \
+    hp.split_index = _split_ind; \
+    hp.type = _type | MODULE_OFFSET | FUNCTION_OFFSET; \
+    hp.length_offset = _len_off; \
+    NewHook(hp, #_fun); \
+  }
+#ifndef _WIN64
+enum args {
+    s_retaddr = 0
+    , s_arg1 = 4 * 1 // 0x4
+    , s_arg2 = 4 * 2 // 0x8
+    , s_arg3 = 4 * 3 // 0xc
+    , s_arg4 = 4 * 4 // 0x10
+    , s_arg5 = 4 * 5 // 0x14
+    , s_arg6 = 4 * 6 // 0x18
+    , s_arg7 = 4 * 7
+};
+#else // _WIN32
+enum args {
+    s_retaddr = 0x0,
+    s_arg1 = -0x20,
+    s_arg2 = -0x28,
+    s_arg3 = -0x50,
+    s_arg4 = -0x58,
+    s_arg5 = 0x8,
+    s_arg6 = 0x10,
+    s_arg7 = 0x18
+};
+#endif // _WIN64
+
+constexpr short arg_sz = (short)sizeof(void*);
 
 // jichi 7/17/2014: Renamed from InitDefaultHook
 void PcHooks::hookGDIFunctions()
@@ -153,6 +219,103 @@ void PcHooks::hookGDIPlusFunctions()
   NEW_MODULE_HOOK(hModule, GdipMeasureString,           s_arg2, 0,s_arg1,0, USING_UNICODE|USING_STRING, 3) // GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics, GDIPCONST WCHAR *string, INT length, GDIPCONST GpFont *font, GDIPCONST RectF *layoutRect, GDIPCONST GpStringFormat *stringFormat, RectF *boundingBox, INT *codepointsFitted, INT *linesFilled )
 
   DPRINT("leave");
+}
+
+/**
+ * Copied from Textractor 
+ * https://github.com/Artikash/Textractor/blob/aa0c0e0047685b502934fe7ba855b7a7be0a5836/texthook/engine/native/pchooks.cc
+ */
+void PcHooks::hookOtherPcFunctions()
+{
+// int TextHook::InitHook(LPVOID addr, DWORD data, DWORD data_ind, DWORD split_off, DWORD split_ind, WORD type, DWORD len_off)
+
+  // http://msdn.microsoft.com/en-us/library/78zh94ax.aspx
+  // int WINAPI lstrlen(LPCTSTR lpString);
+  // Lstr functions usually extracts rubbish, and might crash certain games like 「Magical Marriage Lunatics!!」
+  // Needed by Gift
+  // Use arg1 address for both split and data
+    NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrlenA, s_arg1, 0, s_arg1, 0, USING_STRING, 0) // 9/8/2013 jichi: int WINAPI lstrlen(LPCTSTR lpString);
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrcpyA, s_arg2, 0, 0, 0, USING_STRING, 0)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrcpynA, s_arg2, 0, 0, 0, USING_STRING, 0)
+
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrlenW, s_arg1, 0, s_arg1, 0, USING_UNICODE | USING_STRING, 0) // 9/8/2013 jichi: add lstrlen
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrcpyW, s_arg2, 0, 0, 0, USING_UNICODE | USING_STRING, 0)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", lstrcpynW, s_arg2, 0, 0, 0, USING_UNICODE | USING_STRING, 0)
+
+    // size_t strlen(const char *str);
+    // size_t strlen_l(const char *str, _locale_t locale);
+    // size_t wcslen(const wchar_t *str);
+    // size_t wcslen_l(const wchar_t *str, _locale_t locale);
+    // size_t _mbslen(const unsigned char *str);
+    // size_t _mbslen_l(const unsigned char *str, _locale_t locale);
+    // size_t _mbstrlen(const char *str);
+    // size_t _mbstrlen_l(const char *str, _locale_t locale);
+
+    // http://msdn.microsoft.com/en-us/library/ex0hs2ad.aspx
+    // Needed by 娘姉妹
+    //
+    // <tchar.h>
+    // char *_strinc(const char *current, _locale_t locale);
+    // wchar_t *_wcsinc(const wchar_t *current, _locale_t locale);
+    // <mbstring.h>
+    // unsigned char *_mbsinc(const unsigned char *current);
+    // unsigned char *_mbsinc_l(const unsigned char *current, _locale_t locale);
+    //_(L"_strinc", _strinc, 4,  0,4,0, USING_STRING, 0) // 12/13/2013 jichi
+    //_(L"_wcsinc", _wcsinc, 4,  0,4,0, USING_UNICODE|USING_STRING, 0)
+
+    // 12/1/2013 jichi:
+    // AlterEgo
+    // http://tieba.baidu.com/p/2736475133
+    // http://www.hongfire.com/forum/showthread.php/36807-AGTH-text-extraction-tool-for-games-translation/page355
+    //
+    // MultiByteToWideChar
+    // http://blgames.proboards.com/thread/265
+    //
+    // WideCharToMultiByte
+    // http://www.hongfire.com/forum/showthread.php/36807-AGTH-text-extraction-tool-for-games-translation/page156
+    //
+    // int MultiByteToWideChar(
+    //   _In_       UINT CodePage,
+    //   _In_       DWORD dwFlags,
+    //   _In_       LPCSTR lpMultiByteStr, // hook here
+    //   _In_       int cbMultiByte,
+    //   _Out_opt_  LPWSTR lpWideCharStr,
+    //   _In_       int cchWideChar
+    // );
+    // int WideCharToMultiByte(
+    //   _In_       UINT CodePage,
+    //   _In_       DWORD dwFlags,
+    //   _In_       LPCWSTR lpWideCharStr,
+    //   _In_       int cchWideChar,
+    //   _Out_opt_  LPSTR lpMultiByteStr,
+    //   _In_       int cbMultiByte,
+    //   _In_opt_   LPCSTR lpDefaultChar,
+    //   _Out_opt_  LPBOOL lpUsedDefaultChar
+    // );
+
+    // 2/29/2020 Artikash: TODO: Sort out what to do for string comparison functions
+    // http://sakuradite.com/topic/159
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", MultiByteToWideChar, s_arg3, 0, 4, 0, USING_STRING, s_arg4 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", WideCharToMultiByte, s_arg3, 0, 4, 0, USING_UNICODE | USING_STRING, s_arg4 / arg_sz)
+
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", GetStringTypeA, s_arg3, 0, 0, 0, USING_STRING, s_arg4 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", GetStringTypeExA, s_arg3, 0, 0, 0, USING_STRING, s_arg4 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", FoldStringA, s_arg2, 0, 0, 0, USING_STRING, s_arg3 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", GetStringTypeW, s_arg2, 0, 0, 0, USING_UNICODE | USING_STRING, s_arg3 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", GetStringTypeExW, s_arg3, 0, 0, 0, USING_UNICODE | USING_STRING, s_arg4 / arg_sz)
+        NEW_HOOK_DLL_NAME(L"kernel32.dll", FoldStringW, s_arg2, 0, 0, 0, USING_UNICODE | USING_STRING, s_arg3 / arg_sz)
+
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharNextA, s_arg1, 0, 0, 0, USING_STRING | DATA_INDIRECT, 1) // LPTSTR WINAPI CharNext(_In_ LPCTSTR lpsz);
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharNextW, s_arg1, 0, 0, 0, USING_UNICODE | DATA_INDIRECT, 1)
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharPrevA, s_arg1, 0, 0, 0, USING_STRING | DATA_INDIRECT, 1) // LPTSTR WINAPI CharPrev(_In_ LPCTSTR lpszStart, _In_ LPCTSTR lpszCurrent);
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharPrevW, s_arg1, 0, 0, 0, USING_UNICODE | DATA_INDIRECT, 1)
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharNextExA, s_arg2, 0, 0, 0, USING_STRING | DATA_INDIRECT, 1) // LPSTR WINAPI CharNextExA(_In_ WORD   CodePage, _In_ LPCSTR lpCurrentChar, _In_ DWORD  dwFlags);
+        NEW_HOOK_DLL_NAME(L"user32.dll", CharPrevExA, s_arg2, 0, 0, 0, USING_UNICODE | DATA_INDIRECT, 1)
+    if (HMODULE module = GetModuleHandleW(L"OLEAUT32.dll"))
+    {
+        NEW_MODULE_HOOK(module, SysAllocString, s_arg1, 0, 0, 0, USING_UNICODE | USING_STRING, 0)
+            NEW_MODULE_HOOK(module, SysAllocStringLen, s_arg1, 0, 0, 0, USING_UNICODE | USING_STRING | KNOWN_UNSTABLE, s_arg2 / arg_sz)
+    }
 }
 
 // jichi 10/2/2013

@@ -108,6 +108,7 @@ enum HookParamType : unsigned long {
   , RELATIVE_SPLIT    = 0x2000 // jichi 10/24/2014: relative split return address
   , HOOK_ENGINE       = 0x4000
   , HOOK_ADDITIONAL   = 0x8000
+  , KNOWN_UNSTABLE    = 0x20000
 };
 
 // 6/1/2014: Fixed split value for hok parameter
