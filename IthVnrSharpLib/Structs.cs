@@ -50,6 +50,8 @@ namespace IthVnrSharpLib
         RELATIVE_SPLIT = 0x2000, // jichi 10/24/2014: relative split return address
         HOOK_ENGINE = 0x4000,
         HOOK_ADDITIONAL = 0x8000,
+        DIRECT_READ = 0x1000,
+        HEX_DUMP = 0x4000,
     }
 
 	[StructLayout(LayoutKind.Sequential, Size = 128)]

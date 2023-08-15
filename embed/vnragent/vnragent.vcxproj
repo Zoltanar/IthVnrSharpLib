@@ -109,8 +109,8 @@
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <QtInstall>5.15.0_msvc2019</QtInstall>
     <QtModules>core;network</QtModules>
+    <QtInstall>5.15.0_msvc2019</QtInstall>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="QtSettings">
     <QtInstall>5.15.0_msvc2019</QtInstall>

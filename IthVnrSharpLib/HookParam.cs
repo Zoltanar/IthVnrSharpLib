@@ -201,8 +201,63 @@ namespace IthVnrSharpLib
 				return true;
 			}
 		}
+		
+        /// <summary>
+        /// Copied from Textractor
+        /// https://github.com/Artikash/Textractor/blob/15db478e62eb955d2299484dbf2c9c7e707bb4cb/host/hookcode.cpp
+        /// </summary>
+        public static bool ParseR(string RCode, ref HookParam hp)
+        {
+            hp.type |= (uint)HookParamType.DIRECT_READ;
 
-		private static uint GetUIntFromHexValue(string text)
+            // {S|Q|V|M}
+            switch (RCode[0])
+            {
+                case 'S':
+                    break;
+                case 'Q':
+                    hp.type |= (uint)HookParamType.USING_UNICODE;
+                    break;
+                case 'V':
+                    hp.type |= (uint)HookParamType.USING_UTF8;
+                    break;
+                case 'M':
+                    hp.type |= (uint)HookParamType.USING_UNICODE | (uint)HookParamType.HEX_DUMP;
+                    break;
+                default:
+                    return false;
+            }
+            RCode = RCode.Substring(1);
+
+            // [null_length<]
+            var pattern = new Regex("^([0-9]+)<");
+            var match = pattern.Match(RCode);
+            if (match.Success) //std::regex_search(RCode, match, std::wregex("^([0-9]+)<"))))
+            {
+                //todo
+                //hp.null_length = int.Parse(match.Groups[1].Value);
+                RCode = RCode.Substring(match.Groups[0].Length);
+            }
+
+            // [codepage#]
+            pattern = new Regex("^([0-9]+)#");
+            match = pattern.Match(RCode);
+            if (match.Success)
+            {
+				//todo
+                //hp.codepage = int.Parse(match.Groups[1].Value);
+                RCode = RCode.Substring(match.Groups[0].Length);
+            }
+
+            // @addr
+            pattern = new Regex("@([0-9A-F]+)");
+			match = pattern.Match(RCode);
+            if (!match.Success) return false;
+            hp.address = Convert.ToUInt32(match.Groups[1].Value, 16);
+            return true;
+        }
+
+        private static uint GetUIntFromHexValue(string text)
 		{
 			unchecked
 			{

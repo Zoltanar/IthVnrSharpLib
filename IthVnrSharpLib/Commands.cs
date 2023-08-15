@@ -109,10 +109,12 @@ namespace IthVnrSharpLib
 		{
 			var hp = new HookParam();
 			_stopGarbageCollection.Add(hp);
+            cmd = cmd.TrimStart('/', '\\');
 			try
-			{
-				if (!HookParam.Parse(cmd.Substring(2), ref hp)) return false;
-			}
+            {
+                if (cmd.StartsWith("H") && !HookParam.Parse(cmd.Substring(1), ref hp)) return false;
+                if (cmd.StartsWith("R") && !HookParam.ParseR(cmd.Substring(1), ref hp)) return false;
+            }
 			catch (Exception ex)
 			{
 				_hookManager.ConsoleOutput($"Exception while parsing hook code: {ex}", true);

@@ -843,7 +843,7 @@ bool DetermineEngineType()
   if (::GDIPlusHooksEnabled())
   {
       PcHooks::hookGDIPlusFunctions();
-      PcHooks::hookOtherPcFunctions();
+      //PcHooks::hookOtherPcFunctions();
   }
   if (!found) { // jichi 10/2/2013: Only enable it if no game engine is detected
     PcHooks::hookLstrFunctions();
