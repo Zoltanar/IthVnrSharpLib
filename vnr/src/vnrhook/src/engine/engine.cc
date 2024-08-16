@@ -7767,6 +7767,54 @@ void InsertBrunsHook()
  */
 
 namespace { // unnamed QLIE
+    /**
+* Artikash 8/1/2018: new QLIE hook. old one misses on https://vndb.org/v22308 and https://vndb.org/v19182
+* ExtTextOut hook misses characters because of font caching
+* Method to find H-code: trace call stack from ExtTextOut until missing characters from default hook are found
+* /HW-1C*0:-20@base address of pattern
+* characterizing pattern:
+kimimeza.exe+100D9C - 55                    - push ebp
+kimimeza.exe+100D9D - 8B EC                 - mov ebp,esp
+kimimeza.exe+100D9F - 83 C4 E4              - add esp,-1C { 228 }
+kimimeza.exe+100DA2 - 53                    - push ebx
+kimimeza.exe+100DA3 - 56                    - push esi
+kimimeza.exe+100DA4 - 57                    - push edi
+kimimeza.exe+100DA5 - 33 D2                 - xor edx,edx
+kimimeza.exe+100DA7 - 89 55 FC              - mov [ebp-04],edx
+*/
+    bool InsertQLIE3Hook()
+    {
+        const BYTE bytes[] =
+        {
+            0x55,
+            0x8b, 0xec,
+            0x83, 0xc4, 0xe4,
+            0x53,
+            0x56,
+            0x57,
+            0x33, 0xd2,
+            0x89, 0x55, 0xfc
+        };
+        ULONG range = min(module_limit_ - module_base_, MAX_REL_ADDR);
+        ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), module_base_, module_base_ + range);
+        if (!addr) {
+            ConsoleOutput("Textractor:QLIE3: pattern not found");
+            //ConsoleOutput("Not QLIE2");
+            return false;
+        }
+
+        HookParam hp = {};
+        hp.type = USING_UNICODE | DATA_INDIRECT | USING_SPLIT;
+        hp.length_offset = 1;
+        hp.offset = pusha_esi_off - 4;
+        hp.split = pusha_edi_off - 4;
+        hp.address = addr;
+
+        ConsoleOutput("Textractor: INSERT QLIE3");
+        NewHook(hp, "QLiE3");
+        //ConsoleOutput("QLIE2");
+        return true;
+    }
 /**
  * jichi 8/18/2013: new QLIE hook
  * See: http://www.hongfire.com/forum/showthread.php/420362-QLIE-engine-Hcode
@@ -7858,7 +7906,7 @@ bool InsertQLIE1Hook()
 
 // jichi 8/18/2013: Add new hook
 bool InsertQLIEHook()
-{ return InsertQLIE1Hook() || InsertQLIE2Hook(); }
+{ return InsertQLIE1Hook() || InsertQLIE2Hook() || InsertQLIE3Hook(); }
 
 /********************************************************************************************
 CandySoft hook:
