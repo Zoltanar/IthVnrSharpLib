@@ -13,11 +13,11 @@ namespace IthVnrSharpLib
 	{
 		public static TextOutputEvent UpdateDisplay;
 		public static VNR VnrProxy;
-		public static Func<bool> CopyToClipboardFunc;
 		public static Encoding[] AllEncodings => IthVnrViewModel.Encodings;
-		protected static bool CopyToClipboard => CopyToClipboardFunc();
+		protected static bool CopyToClipboard => MainViewModel.Settings.ClipboardFlag;
+        public static IthVnrViewModel MainViewModel { get; set; }
 
-		public TextThread LinkTo { get; set; }
+        public TextThread LinkTo { get; set; }
 		protected readonly object TimerTickLock = new();
 		protected Timer Timer;
 		private bool _isDisplay = true;
@@ -81,7 +81,7 @@ namespace IthVnrSharpLib
 		public abstract string PersistentIdentifier { get; }
 		public virtual string DisplayIdentifier => PersistentIdentifier;
 
-		protected const int TextTrimAt = 2048;
+        protected const int TextTrimAt = 2048;
 		protected const int TextTrimCount = 512;
 
 		protected TextThread(IntPtr id)

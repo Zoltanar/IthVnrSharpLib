@@ -5806,6 +5806,12 @@ int GetShinaRioVersion()
   return ret;
 }
 
+bool IsSJIS(char* text)
+{
+    for (int i = 0; i < 3; ++i) if (!IsDBCSLeadByte(text[i * 2])) return false;
+    return true;
+}
+
 } // unnamed namespace
 
 // jichi 8/24/2013: Rewrite ShinaRio logic.
@@ -5877,14 +5883,14 @@ bool InsertShinaHook()
   return false;
 }
 
-bool Waffle3Filter(LPVOID data, DWORD* size, HookParam*, BYTE)
+	bool Waffle3Filter(LPVOID data, DWORD* size, HookParam*, BYTE)
 {
     auto text = reinterpret_cast<LPSTR>(data);
     auto len = reinterpret_cast<size_t*>(size);
     static std::string prevText;
 
     if (LPSTR bs = cpp_strnstr(text, "\\", *len))
-        if (bs > text && *--bs >= 65 && *bs <= 122) // garbage text
+        if (bs > text && !IsSJIS(text)) // garbage text
             return false;
 
     if (prevText.find(text, 0, *len) != std::string::npos) // Check if the string is present in the previous one

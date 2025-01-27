@@ -481,13 +481,20 @@ namespace IthVnrSharpLib
 				Bytes.Add(currentBytes);
 				if (!EncodingDefined && (IsDisplay || IsPosting)) SetEncoding(null);
 				if (IsDisplay) OnPropertyChanged(nameof(Text));
-				if (!IsPosting) return;
+				//initialise user game on first text.
+                MainViewModel.InitializeUserGame(ProcessId);
+                if (!IsPosting) return;
 				var text = OnTick(currentBytes);
 				if (CopyToClipboard) CopyTextToClipboard(text, currentBytes);
 			}
 		}
 
-		public override GameTextThread FindSaved(ConcurrentList<GameTextThread> gameTextThreads)
+        private void HookSavedCodesIfFirstTextForProcess()
+        {
+            MainViewModel.InitializeUserGame(ProcessId);
+        }
+
+        public override GameTextThread FindSaved(ConcurrentList<GameTextThread> gameTextThreads)
 		{
 			var savedThread = base.FindSaved(gameTextThreads);
 			if (savedThread != null) return savedThread;

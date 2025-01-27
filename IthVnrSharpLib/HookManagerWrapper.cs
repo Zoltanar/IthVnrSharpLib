@@ -101,7 +101,7 @@ namespace IthVnrSharpLib
 		public HookManagerWrapper(IthVnrViewModel propertyChangedNotifier, TextOutputEvent updateDisplayText, ThreadTableWrapper threadTable)
 		{
 			TextThread.UpdateDisplay = updateDisplayText;
-			TextThread.CopyToClipboardFunc = () => _viewModel.Settings.ClipboardFlag;
+            TextThread.MainViewModel = propertyChangedNotifier;
 			_viewModel = propertyChangedNotifier;
 			_threadTable = threadTable;
 			var consoleThread = _threadTable.CreateConsoleThread();
