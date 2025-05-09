@@ -5978,9 +5978,9 @@ void InsertWaffleHook()
       0x50,                     //50         push eax
       0x8b, 0xce,               //8BCE mov   ecx,esi
       0xc6, 0x45, 0xfc, XX,     //C645 FC 01 move byte ptr ss:[ebp-4],?
-      0x89, 0x75, 0xd4,         //8975 D4    move dword ptr ss:[ebp-0x2c],esi
+      0x89, 0x75, XX,         //8975 D4    move dword ptr ss:[ebp-0x2c],esi
       0xe8, XX4,                //E8 ??      call ??
-      0x8d, 0x45, 0xdc          //8D45 DC    lea eax,dword ptr ss:[ebp-0x24]
+      0x8d, 0x45, XX          //8D45 DC    lea eax,dword ptr ss:[ebp-0x24]
   };
     if (DWORD addr = MemDbg::matchBytes(bytes, sizeof(bytes), module_base_, module_limit_))
   {

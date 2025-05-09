@@ -267,6 +267,8 @@ namespace IthVnrSharpLib
 				if (thread.LinkTo != null) thread = thread.LinkTo;
 				return;
             }
+			//program may be closing
+			if (thread == null) return;
             _viewModel.InitializeUserGame(thread.ProcessId);
 			if (MergeByHookCode)
 			{
@@ -310,7 +312,7 @@ namespace IthVnrSharpLib
 
 		public int AddTextToThread(TextThread thread, object textObject, int len, bool newLine)
 		{
-			if (_viewModel.Finalized || Paused || len == 0 || _viewModel.IsPaused) return len;
+			if (_viewModel.Finalized || thread == null || Paused || len == 0 || _viewModel.IsPaused) return len;
 			if (!ShowLatestThread && (thread.IsPaused || (thread.Id != _viewModel.SelectedTextThread?.Id && IgnoreOtherThreads))) return len;
 			if (newLine) return len;
 			if (ShowLatestThread) thread.IsDisplay = true;

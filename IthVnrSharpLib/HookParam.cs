@@ -57,7 +57,7 @@ namespace IthVnrSharpLib
 			unchecked
 			{
 				// /H[X]{A|B|W|S|Q}[N][data_offset[*drdo]][:sub_offset[*drso]]@addr[:[module[:{name|#ordinal}]]]
-				var rx = new Regex("^X?([ABWSQ])(N)?", RegexOptions.IgnoreCase);
+				var rx = new Regex("^X?([ABWSQ])X?(N)?", RegexOptions.IgnoreCase);
 				var m1 = rx.Matches(cmd);
 				var result = m1.Count != 0;
 				if (!result) return false;
