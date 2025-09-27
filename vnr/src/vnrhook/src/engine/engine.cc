@@ -6018,6 +6018,56 @@ void InsertWaffleHook()
         NewHook(hp, "WAFFLE3");
         found = true;
     }
+
+    // by Chenx221
+  // Tested: https://vndb.org/r128617 (FHD三件套)
+  /*
+kf3FHD.exe
+006990E8 | 6A 4C              | push 4C                               |
+006990EA | B8 1F297D00        | mov eax,kf3fhd.7D291F                 |
+006990EF | E8 437C1100        | call kf3fhd.7B0D37                    |
+006990F4 | 8BC1               | mov eax,ecx                           |
+006990F6 | 8945 C8            | mov dword ptr ss:[ebp-38],eax         |
+006990F9 | 8B7D 08            | mov edi,dword ptr ss:[ebp+8]          |
+   */
+    const BYTE bytes3[] = {
+      0x6A, 0x4C, 0xB8, XX4, 0xE8, XX4, 0x8B, 0xC1
+    };
+    if (DWORD addr = MemDbg::findBytes(bytes3, sizeof(bytes3), module_base_, module_base_ + range))
+    {
+        HookParam hp = {};
+        hp.address = addr;
+        hp.length_offset = 1;
+        hp.offset = 4;
+        hp.index = 0x00;
+        hp.type = DATA_INDIRECT;
+        ConsoleOutput("Textractor: INSERT WAFFLE4"); // I suspect this is an old engine.
+        NewHook(hp, "WAFFLE4");
+        found = true;
+    }
+
+    // By Chenx221
+    // For ヒミツの合宿 -スク水ヒップに溺れたい- 体験版
+    const BYTE bytes4[] = {
+        0x55,                     // push ebp
+        0x8B, 0xEC,               // mov ebp,esp
+        0x8B, 0x55, 0x18,         // mov edx, dword ptr ss:[ebp+0x18] <- hook here
+        0x56,                     // push esi
+        0x8B, 0x75, 0x0C,         // mov esi, dword ptr ss:[ebp+0xC]
+        0x57,                     // push edi
+    };
+    if (DWORD addr = MemDbg::findBytes(bytes4, sizeof(bytes4), module_base_, module_base_ + range))
+    {
+        HookParam hp = {};
+        hp.address = addr + 3;
+        hp.offset = 0x8;
+        hp.filter_fun = Waffle3Filter;
+        hp.type = USING_STRING;
+        ConsoleOutput("Textractor: INSERT WAFFLE5");
+        NewHook(hp, "WAFFLE5");
+        found = true;
+    }
+
   //ConsoleOutput("Probably Waffle. Wait for text.");
   if (!found) trigger_fun_ = InsertWaffleDynamicHook;
   SwitchTrigger(true);
@@ -16332,6 +16382,131 @@ static void SpecialHookMonoString(DWORD esp_base, HookParam *hp, BYTE, DWORD *da
       s = hp->address;
     *split = s;
   }
+}
+bool InsertAnimHook() {
+    const BYTE bytes[] = { 0xC7,0x45,0xFC,0x01,0x00,0x00,0x00,0x8B,0x4D,0x10,0x51,0x8D,0x8D,0x40,0x7E,0xFF,0xFF };
+    ULONG range = min(module_limit_ - module_base_, MAX_REL_ADDR);
+    ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), module_base_, module_base_ + range);
+    if (!addr) {
+        ConsoleOutput("vnreng:Anim: pattern not found");
+        return false;
+    }
+    HookParam myhp = {};
+    myhp.address = addr + 10;
+
+    myhp.type = USING_STRING | NO_CONTEXT; // /HQ 不使用上下文区分 把所有线程的文本都提取
+
+    // data_offset
+    myhp.offset = pusha_ecx_off - 4;//esp+4
+
+    NewHook(myhp, "Anim");
+    ConsoleOutput("Insert: Anim Hook by:IOV");
+    return true;
+}
+
+bool InsertAnim2Hook() {
+    const BYTE bytes[] = { 0xC7,0x45,0xFC,0x01,0x00,0x00,0x00,0x8B,0x45,0x10,0x50,0x8D,0x8D,0xAC,0x7E,0xFF,0xFF };
+    ULONG range = min(module_limit_ - module_base_, MAX_REL_ADDR);
+    ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), module_base_, module_base_ + range);
+    if (!addr) {
+        ConsoleOutput("vnreng:Anim2: pattern not found");
+        return false;
+    }
+    HookParam myhp = {};
+    myhp.address = addr + 10;
+
+    myhp.type = USING_STRING | NO_CONTEXT;
+
+    // data_offset
+    myhp.offset = pusha_eax_off - 4;//esp+4
+
+    NewHook(myhp, "Anim2");
+    ConsoleOutput("Insert: Anim2 Hook by:IOV");
+    return true;
+}
+bool Anim3Filter(LPVOID data, DWORD* size, HookParam*, BYTE)
+{
+    auto text = reinterpret_cast<LPSTR>(data);
+    auto len = reinterpret_cast<size_t*>(size);
+
+    StringFilterBetween(text, len, "\x81\x40", 2, "@m", 2); // @r(2,はと)
+    StringFilterBetween(text, len, "\x81\x40", 2, "@n", 2); // @r(2,はと)
+    StringCharReplacer(text, len, "@b", 2, ' ');
+    StringCharReplacer(text, len, "\x81\x42", 2, '.');
+    StringCharReplacer(text, len, "\x81\x48", 2, '?');
+    StringCharReplacer(text, len, "\x81\x49", 2, '!');
+
+    return true;
+}
+
+bool InsertAnim3Hook()
+{
+    HookParam hp = {};
+    //mod by Blu3train
+    /*
+    * Sample games:
+    * https://vndb.org/v17427
+    * https://vndb.org/v18837
+    */
+    const BYTE bytes[] = {
+      0xCC,                       // int 3
+      0x55,                       // push ebp      << hook here
+      0x8B, 0xEC,                 // mov ebp,esp
+      0x81, 0xEC, XX4,            // sub esp,00000830
+      0xA1, XX4,                  // mov eax,[musu_mama.exe+A91F0]
+      0x33, 0xC5,                 // xor eax,ebp
+      0x89, 0x45, 0xE8            // mov [ebp-18],eax
+    };
+
+    // mod by Chenx221
+    /*
+      PlayDRM ok
+      Sample games:
+      https://vndb.org/v48594
+      https://vndb.org/v52822
+      https://vndb.org/v55359
+      https://vndb.org/v57286 (Trial)
+    */
+    const BYTE bytes2[] = {
+        0xCC,                                   // int3
+        0x55,                                   // push ebp      << hook here
+        0x8B, 0xEC,                             // mov ebp,esp
+        0x6A, 0xFF,                             // push FFFFFFFF
+        0x68, XX4,                              // push mamahaha2.CA311B
+        0x64, 0xA1, 0x00, 0x00, 0x00, 0x00,     // mov eax,dword ptr fs:[0]
+        0x50,                                   // push eax
+        0x81, 0xEC, XX4,                        // sub esp,D20
+        0xA1, XX4,                              // mov eax,dword ptr ds:[CBC010]
+        0x33, 0xC5,                             // xor eax,ebp
+        0x89, 0x45, 0xF0,                       // mov dword ptr ss:[ebp-10],eax
+        0x56,                                   // push esi
+        0x50,                                   // push eax
+        0x8D, 0x45, 0xF4,                       // lea eax,dword ptr ss:[ebp-C]
+        0x64, 0xA3, 0x00, 0x00, 0x00, 0x00,     // mov dword ptr fs:[0],eax
+        0x89, 0x8D, 0x58, 0xF3, 0xFF, 0xFF      // mov dword ptr ss:[ebp-CA8],ecx
+    };
+    ULONG range = min(module_limit_ - module_base_, MAX_REL_ADDR);
+    ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), module_base_, module_base_ + range);
+    if (!addr) {
+        addr = MemDbg::findBytes(bytes2, sizeof(bytes2), module_base_, module_base_ + range);
+        if (!addr) {
+            ConsoleOutput("vnreng:Anim3: pattern not found");
+            return false;
+        }
+        // hp.offset = pusha_eax_off - 4;
+        hp.offset = 4;
+    }
+    else {
+        hp.offset = pusha_edx_off - 4;
+    }
+
+    hp.address = addr + 1;
+    hp.type = USING_STRING;
+    hp.filter_fun = Anim3Filter;
+    ConsoleOutput("vnreng: INSERT Anim3");
+    NewHook(hp, "Anim3");
+
+    return true;
 }
 
 bool InsertMonoHooks()

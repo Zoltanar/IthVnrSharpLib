@@ -283,6 +283,11 @@ bool DetermineEngineByFile2()
     if (!IthCheckFile(L"noblesse.exe"))
       InsertYurisHook();
     return true;
+
+    // 未测试，后面有机会再看看
+    if (IthFindFile(L"voice\\*.pck")) {
+        return /*InsertAnimHook() || InsertAnim2Hook() ||*/ InsertAnim3Hook();
+    }
   }
   if (IthFindFile(L"*.npa")) {
     InsertNitroplusHook();

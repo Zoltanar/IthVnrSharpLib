@@ -165,6 +165,12 @@ void InsertWaffleHook();        // WAFFLE: cg.pak
 bool InsertCircusHook1();
 bool InsertCircusHook2();
 
+
+// Anim engines
+bool InsertAnimHook(); 
+bool InsertAnim2Hook(); 
+bool InsertAnim3Hook();
+
 } // namespace Engine
 
 // EOF
