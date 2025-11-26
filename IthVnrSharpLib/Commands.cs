@@ -110,6 +110,12 @@ namespace IthVnrSharpLib
 			var hp = new HookParam();
 			_stopGarbageCollection.Add(hp);
             cmd = cmd.TrimStart('/', '\\');
+			if (cmd.StartsWith("HX")) cmd = $"H{cmd.Substring(2)}";
+			if(_viewModel.ThreadTable.Map.Any(tt => tt.Value is HookTextThread htt && htt.HookCode.Equals($"/{cmd}", StringComparison.InvariantCultureIgnoreCase)))
+			{
+				_hookManager.ConsoleOutput($"Already attached to hook code {cmd}", true);
+				return false;
+			}
 			try
             {
                 if (cmd.StartsWith("H") && !HookParam.Parse(cmd.Substring(1), ref hp)) return false;

@@ -269,6 +269,11 @@ namespace IthVnrSharpLib
             }
 			//program may be closing
 			if (thread == null) return;
+			if(TextThreads.Count >= 64)
+			{
+				ConsoleOutput($"Maximum threads reached, ignoring thread with pointer {threadPointer}", true);
+				return;
+			}
             _viewModel.InitializeUserGame(thread.ProcessId);
 			if (MergeByHookCode)
 			{

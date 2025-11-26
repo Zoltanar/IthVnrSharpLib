@@ -27,8 +27,9 @@ namespace IthVnrSharpLib
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private bool _finalized;
 		private bool _disposed;
-		private bool _userGameInitialized;
-		private readonly object _disposeLock = new();
+        private bool _userGameInitialized;
+        private bool _userGameInitializing;
+        private readonly object _disposeLock = new();
 		/// <summary>
 		/// Argument is Process Id.
 		/// </summary>
@@ -97,9 +98,17 @@ namespace IthVnrSharpLib
 
 		public void InitializeUserGame(int processId)
 		{
-			if (UserGameInitialized) return;
-			InitializeUserGameAction?.Invoke(processId);
-			UserGameInitialized = true;
+			if (UserGameInitialized || _userGameInitializing) return;
+			_userGameInitializing = true;
+			try
+            {
+                InitializeUserGameAction?.Invoke(processId);
+            }
+			finally
+			{
+				_userGameInitializing = false;
+                UserGameInitialized = true;
+            }
 		}
 
 		public IthVnrViewModel()
