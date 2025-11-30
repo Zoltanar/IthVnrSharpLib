@@ -85,7 +85,7 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>..\..\..\Debug\</OutDir>
+    <OutDir>..\..\..\Debug\net10.0-windows\</OutDir>
     <IntDir>int\</IntDir>
     <TargetName>vnragent</TargetName>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>

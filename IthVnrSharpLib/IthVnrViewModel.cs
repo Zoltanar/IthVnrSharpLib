@@ -22,7 +22,13 @@ namespace IthVnrSharpLib
 	[Serializable]
 	public class IthVnrViewModel : INotifyPropertyChanged, IDisposable
 	{
-		private VNR.SetThreadCallback _threadTableSetThread;
+		static IthVnrViewModel()
+		{
+			Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+			Encodings = new[] { Encoding.GetEncoding("Shift-JIS"), Encoding.UTF8, Encoding.Unicode };
+        }
+
+        private VNR.SetThreadCallback _threadTableSetThread;
 		private VNR.RegisterPipeCallback _registerPipe;
 		private VNR.RegisterProcessRecordCallback _registerProcessRecord;
 		private bool _finalized;
@@ -43,7 +49,7 @@ namespace IthVnrSharpLib
 		public virtual TextThread SelectedTextThread { get; set; }
 		public List<ProcessInfo> DisplayProcesses => HookManager?.Processes.Values.OrderBy(x => x.Id).ToList();
 		public ProcessInfo SelectedProcess { get; set; }
-		public static Encoding[] Encodings { get; } = { Encoding.GetEncoding("SHIFT-JIS"), Encoding.UTF8, Encoding.Unicode };
+		public static Encoding[] Encodings { get; }
 		public EmbedHost EmbedHost { get; private set; }
 		public VNR VnrHost { get; private set; }
 		public virtual bool IsPaused => false;

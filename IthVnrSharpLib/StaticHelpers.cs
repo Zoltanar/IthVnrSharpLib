@@ -5,7 +5,7 @@ namespace IthVnrSharpLib
 {
 	public static class StaticHelpers
 	{
-		private const string BuildDate = "07 - Nov - 2021";
+		private const string BuildDate = "30 - Nov - 2025";
 		internal const string Version = "2.5.0";
 		public static readonly string VersionInfo = $"{nameof(IthVnrSharpLib)} {Version} (VNR DLLs Forked from 3.5640.1) {BuildDate}";
 
