@@ -81,7 +81,8 @@ namespace IthVnrSharpLib
 
 		public VNR()
 		{
-			if (!File.Exists(VnrHostDllName)) throw new FileNotFoundException("VNR Host dll not found.", VnrHostDllName);
+			var vnrHostDllAbsolutePath = Path.GetFullPath(VnrHostDllName);
+            if (!File.Exists(vnrHostDllAbsolutePath)) throw new FileNotFoundException("VNR Host dll not found.", vnrHostDllAbsolutePath);
 			_libraryHandle = WinAPI.LoadLibrary(VnrHostDllName);
 			if (_libraryHandle == IntPtr.Zero) Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
 		}
